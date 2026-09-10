@@ -1,1 +1,1 @@
-# Th-o_L_Maxime_Projet_P-hton_FastAPI
+# Theo_L_Maxime_Projet_Smart_Fridge
