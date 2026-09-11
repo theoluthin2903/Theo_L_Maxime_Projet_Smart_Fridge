@@ -1,3 +1,11 @@
+from fastapi import FastAPI
+from app.db.database import Base, engine
+from app.routers.auth import router as auth_router
+
+Base.metadata.create_all(bind=engine)
+app = FastAPI()
+app.include_router(auth_router)
+
 import os
 
 import requests
@@ -5,9 +13,145 @@ from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+
+
 app = FastAPI(title="Smart Fridge & Nutrition Coach")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+app.include_router(auth_router)
+
+
+@app.get("/")
+def auth_page():
+    return render_page(
+        "Authentification | Smart Fridge",
+        "/",
+        """
+        <section class="card max-w-5xl mx-auto">
+            <div class="mb-8">
+                <p class="text-sm font-semibold uppercase tracking-[0.2em] text-green-700">Smart Fridge</p>
+                <h1 class="mt-2 text-3xl font-black text-slate-900">Connexion & inscription</h1>
+            </div>
+
+            <div class="grid gap-6 lg:grid-cols-2">
+                <div class="rounded-2xl border border-green-100 bg-green-50 p-6">
+                    <h2 class="mb-4 text-2xl font-bold text-slate-900">Se connecter</h2>
+                    <form id="login-form" class="space-y-4">
+                        <div>
+                            <label for="login-email" class="mb-2 block text-sm font-semibold text-slate-700">Email</label>
+                            <input id="login-email" name="email" type="email" placeholder="vous@example.com" required class="w-full rounded-xl border border-green-200 bg-white px-4 py-3 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-200" />
+                        </div>
+                        <div>
+                            <label for="login-password" class="mb-2 block text-sm font-semibold text-slate-700">Mot de passe</label>
+                            <input id="login-password" name="password" type="password" placeholder="••••••••" required class="w-full rounded-xl border border-green-200 bg-white px-4 py-3 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-200" />
+                        </div>
+                        <button type="submit" class="w-full rounded-xl bg-green-700 px-4 py-3 font-semibold text-white transition hover:bg-green-800">
+                            Se connecter
+                        </button>
+                        <div id="login-message" class="hidden rounded-lg border border-green-200 bg-white px-3 py-2 text-sm text-green-700"></div>
+                    </form>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                    <h2 class="mb-4 text-2xl font-bold text-slate-900">Créer un compte</h2>
+                    <form id="register-form" class="space-y-4">
+                        <div>
+                            <label for="register-email" class="mb-2 block text-sm font-semibold text-slate-700">Email</label>
+                            <input id="register-email" name="email" type="email" placeholder="nouveau@example.com" required class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" />
+                        </div>
+                        <div>
+                            <label for="register-password" class="mb-2 block text-sm font-semibold text-slate-700">Mot de passe</label>
+                            <input id="register-password" name="password" type="password" placeholder="Minimum 6 caractères" required class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" />
+                        </div>
+                        <button type="submit" class="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white transition hover:bg-slate-700">
+                            S'inscrire
+                        </button>
+                        <div id="register-message" class="hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"></div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <script>
+            async function submitAuthForm(formId, endpoint, messageBoxId, successText) {
+                const form = document.getElementById(formId);
+                const messageBox = document.getElementById(messageBoxId);
+                const submitButton = form.querySelector('button[type="submit"]');
+
+                form.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    const formData = new FormData(form);
+                    const payload = Object.fromEntries(formData.entries());
+
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Chargement...';
+                    messageBox.classList.add('hidden');
+
+                    try {
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json().catch(() => ({}));
+
+                        if (!response.ok) {
+                            throw new Error(result.detail || 'Une erreur est survenue.');
+                        }
+
+                        if (result.access_token) {
+                            localStorage.setItem('smartfridge_token', result.access_token);
+                        }
+
+                        messageBox.textContent = successText;
+                        messageBox.className = 'rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700';
+                        messageBox.classList.remove('hidden');
+                        form.reset();
+                        setTimeout(() => window.location.href = '/', 900);
+                    } catch (error) {
+                        messageBox.textContent = error.message;
+                        messageBox.className = 'rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700';
+                        messageBox.classList.remove('hidden');
+                    } finally {
+                        submitButton.disabled = false;
+                        submitButton.textContent = formId === 'login-form' ? 'Se connecter' : "S'inscrire";
+                    }
+                });
+            }
+
+            submitAuthForm('login-form', '/auth/login', 'login-message', 'Connexion réussie. Redirection en cours...');
+            submitAuthForm('register-form', '/auth/register', 'register-message', 'Compte créé avec succès. Redirection en cours...');
+        </script>
+        """
+    )
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    
+    openapi_schema = FastAPI.openapi(app)
+
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT"
+        }
+    }
+
+    for path in openapi_schema["paths"]:
+        for method in openapi_schema["paths"][path]:
+            openapi_schema["paths"][path][method]["security"] = [{"BearerAuth": []}]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 USDA_API_KEY = os.getenv("USDA_API_KEY")
 
 fridge_items = []
