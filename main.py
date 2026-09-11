@@ -8,6 +8,7 @@ from jose import JWTError, jwt
 
 from app.core.jwt import ALGORITHM, SECRET_KEY
 from app.db.database import Base, engine
+from app.db import models  # noqa: F401
 from app.routers.auth import router as auth_router
 
 Base.metadata.create_all(bind=engine)
@@ -378,7 +379,11 @@ def render_page(title: str, active: str, body: str) -> HTMLResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
-def home_page():
+def home_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
     body = """
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h1 class="mb-3 text-3xl font-bold text-slate-800">Bienvenue dans votre Smart Fridge</h1>
@@ -403,7 +408,10 @@ def home_page():
 
 
 @app.get("/fridge", response_class=HTMLResponse)
-def fridge_page():
+def fridge_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
     items_html = "".join(
         f"""
         <li class="rounded-xl border border-green-100 bg-green-50 p-4">
@@ -492,12 +500,18 @@ def add_to_fridge(
 
 
 @app.get("/products", response_class=HTMLResponse)
-def products_page():
+def products_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
     query = ""
     if fridge_items:
         query = fridge_items[0].get("name", "").strip()
+    if "q" in request.query_params:
+        query = request.query_params.get("q", "").strip()
 
-    products_data = get_usda_foods(query, limit=3) if USDA_API_KEY and query else []
+    products_data = get_usda_foods(query, limit=3) if query else []
     items_html = "".join(
         f"""
         <li class="rounded-xl border border-green-100 bg-green-50 p-4">
@@ -530,7 +544,11 @@ def products_page():
 
 
 @app.get("/recipes", response_class=HTMLResponse)
-def recipes_page():
+def recipes_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
     ingredient = ""
     if fridge_items:
         ingredient = fridge_items[0].get("name", "").strip()
@@ -559,7 +577,11 @@ def recipes_page():
 
 
 @app.get("/nutrition", response_class=HTMLResponse)
-def nutrition_page():
+def nutrition_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
     nutrition_summary = get_nutrition_summary()
     body = f"""
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
@@ -577,7 +599,11 @@ def nutrition_page():
 
 
 @app.get("/alerts", response_class=HTMLResponse)
-def alerts_page():
+def alerts_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
     items = "".join(
         f"""
         <li class="rounded-xl border border-amber-100 bg-amber-50 p-4">
