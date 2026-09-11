@@ -1,3 +1,8 @@
+from fastapi import FastAPI
+from app.db.database import Base, engine
+from app.routers.auth import router as auth_router
+from app.routers.profile import router as profile_router
+
 import os
 
 import requests
@@ -15,6 +20,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Smart Fridge & Nutrition Coach")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(auth_router)
+app.include_router(profile_router)
 
 USDA_API_KEY = os.getenv("USDA_API_KEY")
 fridge_items = []
@@ -316,6 +322,7 @@ def nav(active: str) -> str:
         ("/recipes", "Recettes"),
         ("/nutrition", "Nutrition"),
         ("/alerts", "Alertes"),
+        ("/profile", "Profile")
     ]
     html = []
     for path, label in links:
@@ -620,3 +627,28 @@ def alerts_page(request: Request):
         </div>
     """
     return render_page("Alertes", "/alerts", body)
+
+@app.get("/profile", response_class=HTMLResponse)
+def profile_page():
+    body = """
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-5 text-3xl font-bold text-slate-800">Profil</h1>
+
+            <div class="page">
+                <div class="card">
+                    <h2 class="text-xl font-semibold mb-3">Informations personnelles</h2>
+
+                    <p class="text-slate-600">Ici tu pourras afficher ou modifier ton âge, poids, taille, sexe et objectif.</p>
+                </div>
+
+                <div class="card">
+                    <h2 class="text-xl font-semibold mb-3">Calcul nutritionnel</h2>
+
+                    <p class="text-slate-600">
+                        Cette section affichera ton TMB, calories de maintien, objectif calorique et macros.
+                    </p>
+                </div>
+            </div>
+        </div>
+    """
+    return render_page("Profil", "/profile", body)
