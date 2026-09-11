@@ -1,18 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth 
+from routers import auth
 
-app = FastAPI(title="Smart Fridge et Nutrition Coach")
+app = FastAPI(title="Smart Fridge & Nutrition Coach")
+
 app.include_router(auth.router)
-
-# CORS (tu pourras ajuster plus tard)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @app.get("/")
 def home():
