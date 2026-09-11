@@ -1,81 +1,101 @@
-from fastapi import FastAPI
+import os
+
+import requests
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from jose import JWTError, jwt
+
+from app.core.jwt import ALGORITHM, SECRET_KEY
 from app.db.database import Base, engine
 from app.routers.auth import router as auth_router
 
 Base.metadata.create_all(bind=engine)
-app = FastAPI()
-app.include_router(auth_router)
-
-import os
-
-import requests
-from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-
-
-
 app = FastAPI(title="Smart Fridge & Nutrition Coach")
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 app.include_router(auth_router)
 
+USDA_API_KEY = os.getenv("USDA_API_KEY")
+fridge_items = []
 
-@app.get("/")
-def auth_page():
+
+def get_token_from_request(request: Request) -> str | None:
+    token = request.cookies.get("access_token")
+    if token:
+        return token
+
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        return auth_header.split(" ", 1)[1]
+
+    return None
+
+
+def require_auth(request: Request) -> RedirectResponse | None:
+    token = get_token_from_request(request)
+    if not token:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if not payload.get("sub"):
+            return RedirectResponse(url="/login", status_code=302)
+    except JWTError:
+        return RedirectResponse(url="/login", status_code=302)
+
+    return None
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
     return render_page(
         "Authentification | Smart Fridge",
-        "/",
+        "/login",
         """
-        <section class="card max-w-5xl mx-auto">
-            <div class="mb-8">
-                <p class="text-sm font-semibold uppercase tracking-[0.2em] text-green-700">Smart Fridge</p>
-                <h1 class="mt-2 text-3xl font-black text-slate-900">Connexion & inscription</h1>
+        <section class="auth-shell">
+            <div class="auth-card auth-card--green">
+                <div class="auth-badge">Smart Fridge</div>
+                <h1>Connexion</h1>
+                <p>Accédez à votre frigo intelligent et à vos recommandations.</p>
+
+                <form id="login-form" class="auth-form">
+                    <div class="field">
+                        <label for="login-email">Email</label>
+                        <input id="login-email" name="email" type="email" placeholder="vous@example.com" required />
+                    </div>
+                    <div class="field">
+                        <label for="login-password">Mot de passe</label>
+                        <input id="login-password" name="password" type="password" placeholder="••••••••" required />
+                    </div>
+                    <button type="submit" class="btn btn-primary">Se connecter</button>
+                    <div id="login-message" class="message message--hidden"></div>
+                </form>
             </div>
 
-            <div class="grid gap-6 lg:grid-cols-2">
-                <div class="rounded-2xl border border-green-100 bg-green-50 p-6">
-                    <h2 class="mb-4 text-2xl font-bold text-slate-900">Se connecter</h2>
-                    <form id="login-form" class="space-y-4">
-                        <div>
-                            <label for="login-email" class="mb-2 block text-sm font-semibold text-slate-700">Email</label>
-                            <input id="login-email" name="email" type="email" placeholder="vous@example.com" required class="w-full rounded-xl border border-green-200 bg-white px-4 py-3 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-200" />
-                        </div>
-                        <div>
-                            <label for="login-password" class="mb-2 block text-sm font-semibold text-slate-700">Mot de passe</label>
-                            <input id="login-password" name="password" type="password" placeholder="••••••••" required class="w-full rounded-xl border border-green-200 bg-white px-4 py-3 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-200" />
-                        </div>
-                        <button type="submit" class="w-full rounded-xl bg-green-700 px-4 py-3 font-semibold text-white transition hover:bg-green-800">
-                            Se connecter
-                        </button>
-                        <div id="login-message" class="hidden rounded-lg border border-green-200 bg-white px-3 py-2 text-sm text-green-700"></div>
-                    </form>
-                </div>
+            <div class="auth-card auth-card--dark">
+                <div class="auth-badge auth-badge--light">Nouveau</div>
+                <h2>Créer un compte</h2>
+                <p>Commencez à organiser votre alimentation et vos achats plus intelligemment.</p>
 
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-                    <h2 class="mb-4 text-2xl font-bold text-slate-900">Créer un compte</h2>
-                    <form id="register-form" class="space-y-4">
-                        <div>
-                            <label for="register-email" class="mb-2 block text-sm font-semibold text-slate-700">Email</label>
-                            <input id="register-email" name="email" type="email" placeholder="nouveau@example.com" required class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" />
-                        </div>
-                        <div>
-                            <label for="register-password" class="mb-2 block text-sm font-semibold text-slate-700">Mot de passe</label>
-                            <input id="register-password" name="password" type="password" placeholder="Minimum 6 caractères" required class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" />
-                        </div>
-                        <button type="submit" class="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white transition hover:bg-slate-700">
-                            S'inscrire
-                        </button>
-                        <div id="register-message" class="hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"></div>
-                    </form>
-                </div>
+                <form id="register-form" class="auth-form">
+                    <div class="field">
+                        <label for="register-email">Email</label>
+                        <input id="register-email" name="email" type="email" placeholder="nouveau@example.com" required />
+                    </div>
+                    <div class="field">
+                        <label for="register-password">Mot de passe</label>
+                        <input id="register-password" name="password" type="password" placeholder="Minimum 6 caractères" required />
+                    </div>
+                    <button type="submit" class="btn btn-secondary">S'inscrire</button>
+                    <div id="register-message" class="message message--hidden"></div>
+                </form>
             </div>
         </section>
 
         <script>
-            async function submitAuthForm(formId, endpoint, messageBoxId, successText) {
+            async function submitAuthForm(formId, endpoint, messageId, successText) {
                 const form = document.getElementById(formId);
-                const messageBox = document.getElementById(messageBoxId);
+                const messageBox = document.getElementById(messageId);
                 const submitButton = form.querySelector('button[type="submit"]');
 
                 form.addEventListener('submit', async (event) => {
@@ -85,19 +105,16 @@ def auth_page():
 
                     submitButton.disabled = true;
                     submitButton.textContent = 'Chargement...';
-                    messageBox.classList.add('hidden');
+                    messageBox.className = 'message message--hidden';
 
                     try {
                         const response = await fetch(endpoint, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
+                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(payload)
                         });
 
                         const result = await response.json().catch(() => ({}));
-
                         if (!response.ok) {
                             throw new Error(result.detail || 'Une erreur est survenue.');
                         }
@@ -107,14 +124,12 @@ def auth_page():
                         }
 
                         messageBox.textContent = successText;
-                        messageBox.className = 'rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700';
-                        messageBox.classList.remove('hidden');
+                        messageBox.className = 'message message--success';
                         form.reset();
-                        setTimeout(() => window.location.href = '/', 900);
+                        window.location.href = '/';
                     } catch (error) {
                         messageBox.textContent = error.message;
-                        messageBox.className = 'rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700';
-                        messageBox.classList.remove('hidden');
+                        messageBox.className = 'message message--error';
                     } finally {
                         submitButton.disabled = false;
                         submitButton.textContent = formId === 'login-form' ? 'Se connecter' : "S'inscrire";
@@ -122,8 +137,8 @@ def auth_page():
                 });
             }
 
-            submitAuthForm('login-form', '/auth/login', 'login-message', 'Connexion réussie. Redirection en cours...');
-            submitAuthForm('register-form', '/auth/register', 'register-message', 'Compte créé avec succès. Redirection en cours...');
+            submitAuthForm('login-form', '/auth/login', 'login-message', 'Connexion réussie. Redirection...');
+            submitAuthForm('register-form', '/auth/register', 'register-message', 'Compte créé avec succès. Redirection...');
         </script>
         """
     )
