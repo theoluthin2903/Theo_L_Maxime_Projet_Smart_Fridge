@@ -12,13 +12,6 @@ GOAL_ADJUSTMENTS = {
 
 
 def compute_bmr_tdee(profile):
-    """Calcule le métabolisme de base, les calories de maintien, l'objectif
-    calorique et les macros à partir d'un profil (age, weight, height, sex,
-    activity, goal).
-
-    `profile` peut être n'importe quel objet exposant ces attributs
-    (ex: une instance de UserDB).
-    """
     if profile.sex == "male":
         bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + 5
     else:
@@ -26,12 +19,17 @@ def compute_bmr_tdee(profile):
 
     activity_factor = ACTIVITY_FACTORS.get(profile.activity, ACTIVITY_FACTORS["sedentary"])
     tdee = bmr * activity_factor
+    target_calories = max(1200, tdee + GOAL_ADJUSTMENTS.get(profile.goal, 0))
 
-    target_calories = tdee + GOAL_ADJUSTMENTS.get(profile.goal, 0)
+    proteins_g = profile.weight * 1.6
+    fats_g = profile.weight * 0.8
+    remaining = target_calories - (proteins_g * 4 + fats_g * 9)
 
-    proteins_g = profile.weight * 2.2
-    fats_g = profile.weight * 1
-    carbs_g = (target_calories - (proteins_g * 4 + fats_g * 9)) / 4
+    if remaining < 0:
+        fats_g = max(0, (target_calories - proteins_g * 4) / 9)
+        remaining = target_calories - (proteins_g * 4 + fats_g * 9)
+
+    carbs_g = max(0, remaining / 4)
 
     return {
         "bmr": round(bmr),
