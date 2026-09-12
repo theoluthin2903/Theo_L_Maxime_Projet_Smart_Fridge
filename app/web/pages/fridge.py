@@ -1,0 +1,260 @@
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse
+
+from app.web.data import fridge_items, get_usda_foods
+from app.web.layout import require_auth, render_page
+
+router = APIRouter()
+
+
+@router.get("/fridge", response_class=HTMLResponse)
+def fridge_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    items_html = "".join(
+        f"""
+        <li class="rounded-xl border border-green-100 bg-green-50 p-4">
+            <div>
+                <strong class="block text-slate-800">{item['name']}</strong>
+                <div class="mt-1 text-sm text-slate-500">Quantité : {item['quantity']}</div>
+                <div class="mt-1 text-sm text-slate-500">Catégorie : {item['category'] or '—'}</div>
+                <div class="mt-1 text-sm text-slate-500">Expiration : {item['expiration_date'] or '—'}</div>
+                <div class="mt-1 text-sm text-slate-500">{item['notes'] or 'Aucune note'}</div>
+            </div>
+        </li>
+        """
+        for item in fridge_items
+    )
+    if not items_html:
+        items_html = "<li class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-slate-500'>Votre frigo est vide pour le moment.</li>"
+
+    body = f"""
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-5 text-3xl font-bold text-slate-800">Mon frigo</h1>
+            <form method="post" action="/fridge" class="grid gap-4 md:grid-cols-2">
+                <div class="flex flex-col gap-2">
+                    <label for="name" class="font-semibold text-slate-700">Nom</label>
+                    <input id="name" name="name" placeholder="Ex : Lait" required class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none ring-0 focus:border-green-500" />
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="quantity" class="font-semibold text-slate-700">Quantité</label>
+                    <input id="quantity" name="quantity" type="number" min="1" value="1" required class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" />
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="expiration_date" class="font-semibold text-slate-700">Date d’expiration</label>
+                    <input id="expiration_date" name="expiration_date" type="date" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" />
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="category" class="font-semibold text-slate-700">Catégorie</label>
+                    <input id="category" name="category" placeholder="Ex : Produits laitiers" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" />
+                </div>
+                <div class="flex flex-col gap-2 md:col-span-2">
+                    <label for="notes" class="font-semibold text-slate-700">Notes</label>
+                    <textarea id="notes" name="notes" placeholder="À consommer rapidement ..." class="min-h-[96px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500"></textarea>
+                </div>
+                <div class="md:col-span-2">
+                    <button type="submit" class="inline-flex rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-800">Ajouter au frigo</button>
+                </div>
+            </form>
+        </div>
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h2 class="mb-4 text-2xl font-bold text-slate-800">Contenu actuel</h2>
+            <ul class="space-y-3">{items_html}</ul>
+        </div>
+    """
+    return render_page("Mon frigo", "/fridge", body, request)
+
+
+@router.post("/fridge", response_class=HTMLResponse)
+def add_to_fridge(
+    request: Request,
+    name: str = Form(...),
+    quantity: int = Form(...),
+    expiration_date: str = Form(""),
+    category: str = Form(""),
+    notes: str = Form(""),
+):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    if not name.strip():
+        items_html = "".join(
+            f"<li class='rounded-xl border border-slate-200 bg-slate-50 p-4'><strong class='block text-slate-800'>{item['name']}</strong><div class='mt-1 text-sm text-slate-500'>{item['quantity']}</div></li>" for item in fridge_items
+        )
+        body = f"""
+            <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+                <h1 class="mb-4 text-3xl font-bold text-slate-800">Mon frigo</h1>
+                <p class="mb-4 rounded-xl bg-red-100 px-4 py-3 font-semibold text-red-700">Le nom du produit est obligatoire.</p>
+                <ul class="space-y-3">{items_html}</ul>
+            </div>
+        """
+        return render_page("Mon frigo", "/fridge", body, request)
+
+    fridge_items.append(
+        {
+            "name": name.strip(),
+            "quantity": quantity,
+            "expiration_date": expiration_date,
+            "category": category.strip(),
+            "notes": notes.strip(),
+        }
+    )
+    return fridge_page(request)
+
+
+@router.get("/products", response_class=HTMLResponse)
+def products_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    query = ""
+    if fridge_items:
+        query = fridge_items[0].get("name", "").strip()
+    if "q" in request.query_params:
+        query = request.query_params.get("q", "").strip()
+
+    products_data = get_usda_foods(query, limit=3) if query else []
+    items_html = "".join(
+        f"""
+        <li class="rounded-xl border border-green-100 bg-green-50 p-4">
+            <strong class="block text-slate-800">{product['name']}</strong>
+            <div class="mt-1 text-sm text-slate-500">Catégorie : {product['category']}</div>
+            <div class="mt-1 text-sm text-slate-500">Calories : {product.get('calories', 0)} kcal</div>
+            <div class="mt-1 text-sm text-slate-500">Protéines : {product.get('protein', 0)} g</div>
+        </li>
+        """
+        for product in products_data
+    )
+    if not items_html:
+        items_html = "<li class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-slate-500'>Aucun produit trouvé. Ajoutez un aliment dans votre frigo ou recherchez un produit.</li>"
+
+    search_box = f"""
+        <form method="get" action="/products" class="mb-5 flex gap-3">
+            <input name="q" value="{query}" class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2" placeholder="Rechercher un aliment" />
+            <button type="submit" class="rounded-xl bg-green-700 px-4 py-2 text-white">Chercher</button>
+        </form>
+    """
+
+    body = f"""
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-5 text-3xl font-bold text-slate-800">Produits</h1>
+            {search_box}
+            <ul class="space-y-3">{items_html}</ul>
+        </div>
+    """
+    return render_page("Produits", "/products", body, request)
+
+
+@router.get("/recipes", response_class=HTMLResponse)
+def recipes_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    ingredient = ""
+    if fridge_items:
+        ingredient = fridge_items[0].get("name", "").strip()
+
+    recipe_data = get_usda_foods(ingredient, limit=3) if ingredient else []
+    cards = "".join(
+        f"""
+        <div class="rounded-xl border border-green-100 bg-green-50 p-5">
+            <h3 class="mb-2 text-xl font-semibold text-slate-800">{recipe['name']}</h3>
+            <div class="text-sm text-slate-500">Temps : {recipe['time']}</div>
+            <div class="text-sm text-slate-500">Difficulté : {recipe['difficulty']}</div>
+            <p class="mt-3 text-slate-600">{recipe['description']}</p>
+        </div>
+        """
+        for recipe in recipe_data
+    )
+    if not cards:
+        cards = "<div class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-slate-500'>Ajoutez un produit au frigo pour obtenir des recettes correspondantes.</div>"
+    body = f"""
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-5 text-3xl font-bold text-slate-800">Recettes</h1>
+            <div class="grid gap-4 md:grid-cols-3">{cards}</div>
+        </div>
+    """
+    return render_page("Recettes", "/recipes", body, request)
+
+
+@router.get("/nutrition", response_class=HTMLResponse)
+def nutrition_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    from app.web.data import get_nutrition_summary
+
+    nutrition_summary = get_nutrition_summary()
+    body = f"""
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-5 text-3xl font-bold text-slate-800">Nutrition</h1>
+            <div class="grid gap-4 md:grid-cols-4">
+                <div class="rounded-xl border border-green-100 bg-green-50 p-4"><h3 class="text-lg font-semibold text-slate-800">Calories</h3><p class="mt-2 text-slate-600">{nutrition_summary['calories']} kcal</p></div>
+                <div class="rounded-xl border border-green-100 bg-green-50 p-4"><h3 class="text-lg font-semibold text-slate-800">Protéines</h3><p class="mt-2 text-slate-600">{nutrition_summary['proteins']} g</p></div>
+                <div class="rounded-xl border border-green-100 bg-green-50 p-4"><h3 class="text-lg font-semibold text-slate-800">Glucides</h3><p class="mt-2 text-slate-600">{nutrition_summary['carbs']} g</p></div>
+                <div class="rounded-xl border border-green-100 bg-green-50 p-4"><h3 class="text-lg font-semibold text-slate-800">Lipides</h3><p class="mt-2 text-slate-600">{nutrition_summary['fat']} g</p></div>
+            </div>
+            <span class="mt-5 inline-block rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800">Score global : {nutrition_summary['score']}</span>
+        </div>
+    """
+    return render_page("Nutrition", "/nutrition", body, request)
+
+
+@router.get("/alerts", response_class=HTMLResponse)
+def alerts_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    from app.web.data import get_alerts
+
+    items = "".join(
+        f"""
+        <li class="rounded-xl border border-amber-100 bg-amber-50 p-4">
+            <strong class="block text-slate-800">{alert['title']}</strong>
+            <div class="mt-1 text-sm text-slate-600">{alert['message']}</div>
+        </li>
+        """
+        for alert in get_alerts()
+    )
+    body = f"""
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-5 text-3xl font-bold text-slate-800">Alertes</h1>
+            <ul class="space-y-3">{items}</ul>
+        </div>
+    """
+    return render_page("Alertes", "/alerts", body, request)
+
+
+@router.get("/profile", response_class=HTMLResponse)
+def profile_page(request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    body = """
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-5 text-3xl font-bold text-slate-800">Profil</h1>
+
+            <div class="page">
+                <div class="card">
+                    <h2 class="text-xl font-semibold mb-3">Informations personnelles</h2>
+                    <p class="text-slate-600">Ici tu pourras afficher ou modifier ton âge, poids, taille, sexe et objectif.</p>
+                </div>
+
+                <div class="card">
+                    <h2 class="text-xl font-semibold mb-3">Calcul nutritionnel</h2>
+                    <p class="text-slate-600">
+                        Cette section affichera ton TMB, calories de maintien, objectif calorique et macros.
+                    </p>
+                </div>
+            </div>
+        </div>
+    """
+    return render_page("Profil", "/profile", body, request)
