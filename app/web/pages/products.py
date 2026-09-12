@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from app.web.data import fridge_items, get_usda_foods
+from app.web.data import fridge_items, get_fridge_search_query, get_usda_foods
 from app.web.layout import require_auth, render_page
 
 router = APIRouter()
@@ -13,9 +13,7 @@ def products_page(request: Request):
     if redirect:
         return redirect
 
-    query = ""
-    if fridge_items:
-        query = fridge_items[0].get("name", "").strip()
+    query = get_fridge_search_query()
     if "q" in request.query_params:
         query = request.query_params.get("q", "").strip()
 

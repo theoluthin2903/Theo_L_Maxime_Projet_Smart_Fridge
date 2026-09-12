@@ -1,10 +1,30 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from app.web.data import fridge_items, get_usda_foods
+from app.web.data import (
+    add_fridge_item,
+    delete_fridge_item,
+    get_fridge_search_query,
+    get_themealdb_recipes,
+    get_usda_foods,
+    load_fridge_items,
+)
 from app.web.layout import require_auth, render_page
 
 router = APIRouter()
+
+
+def get_user_id_from_cookie(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        return None
+    try:
+        from jose import jwt
+        from app.core.jwt import SECRET_KEY, ALGORITHM
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except Exception:
+        return None
 
 
 @router.get("/fridge", response_class=HTMLResponse)
@@ -13,19 +33,27 @@ def fridge_page(request: Request):
     if redirect:
         return redirect
 
+    user_id = get_user_id_from_cookie(request)
+    items = load_fridge_items(user_id)
     items_html = "".join(
         f"""
         <li class="rounded-xl border border-green-100 bg-green-50 p-4">
-            <div>
-                <strong class="block text-slate-800">{item['name']}</strong>
-                <div class="mt-1 text-sm text-slate-500">Quantité : {item['quantity']}</div>
-                <div class="mt-1 text-sm text-slate-500">Catégorie : {item['category'] or '—'}</div>
-                <div class="mt-1 text-sm text-slate-500">Expiration : {item['expiration_date'] or '—'}</div>
-                <div class="mt-1 text-sm text-slate-500">{item['notes'] or 'Aucune note'}</div>
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <strong class="block text-slate-800">{item['name']}</strong>
+                    <div class="mt-1 text-sm text-slate-500">Quantité : {item['quantity']}</div>
+                    <div class="mt-1 text-sm text-slate-500">Catégorie : {item['category'] or '—'}</div>
+                    <div class="mt-1 text-sm text-slate-500">Expiration : {item['expiration_date'] or '—'}</div>
+                    <div class="mt-1 text-sm text-slate-500">{item['notes'] or 'Aucune note'}</div>
+                </div>
+                <form method="post" action="/fridge/delete">
+                    <input type="hidden" name="item_id" value="{item['id']}" />
+                    <button type="submit" class="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Supprimer</button>
+                </form>
             </div>
         </li>
         """
-        for item in fridge_items
+        for item in items
     )
     if not items_html:
         items_html = "<li class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-slate-500'>Votre frigo est vide pour le moment.</li>"
@@ -80,9 +108,12 @@ def add_to_fridge(
     if redirect:
         return redirect
 
+    user_id = get_user_id_from_cookie(request)
+
     if not name.strip():
+        items = load_fridge_items(user_id)
         items_html = "".join(
-            f"<li class='rounded-xl border border-slate-200 bg-slate-50 p-4'><strong class='block text-slate-800'>{item['name']}</strong><div class='mt-1 text-sm text-slate-500'>{item['quantity']}</div></li>" for item in fridge_items
+            f"<li class='rounded-xl border border-slate-200 bg-slate-50 p-4'><strong class='block text-slate-800'>{item['name']}</strong><div class='mt-1 text-sm text-slate-500'>{item['quantity']}</div></li>" for item in items
         )
         body = f"""
             <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
@@ -93,15 +124,21 @@ def add_to_fridge(
         """
         return render_page("Mon frigo", "/fridge", body, request)
 
-    fridge_items.append(
-        {
-            "name": name.strip(),
-            "quantity": quantity,
-            "expiration_date": expiration_date,
-            "category": category.strip(),
-            "notes": notes.strip(),
-        }
-    )
+    if user_id is not None:
+        add_fridge_item(name, quantity, int(user_id), expiration_date, category, notes)
+    return fridge_page(request)
+
+
+@router.post("/fridge/delete", response_class=HTMLResponse)
+def delete_from_fridge(request: Request, item_id: int = Form(...)):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    user_id = get_user_id_from_cookie(request)
+
+    if user_id is not None:
+        delete_fridge_item(item_id, int(user_id))
     return fridge_page(request)
 
 
@@ -111,9 +148,7 @@ def products_page(request: Request):
     if redirect:
         return redirect
 
-    query = ""
-    if fridge_items:
-        query = fridge_items[0].get("name", "").strip()
+    query = get_fridge_search_query()
     if "q" in request.query_params:
         query = request.query_params.get("q", "").strip()
 
@@ -155,11 +190,8 @@ def recipes_page(request: Request):
     if redirect:
         return redirect
 
-    ingredient = ""
-    if fridge_items:
-        ingredient = fridge_items[0].get("name", "").strip()
-
-    recipe_data = get_usda_foods(ingredient, limit=3) if ingredient else []
+    ingredient = get_fridge_search_query()
+    recipe_data = get_themealdb_recipes(ingredient, limit=3) if ingredient else []
     cards = "".join(
         f"""
         <div class="rounded-xl border border-green-100 bg-green-50 p-5">
