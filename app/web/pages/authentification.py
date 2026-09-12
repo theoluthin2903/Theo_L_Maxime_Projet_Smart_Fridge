@@ -17,15 +17,15 @@ def render_auth_page() -> HTMLResponse:
                 <h1>Connexion</h1>
                 <p>Accédez à votre frigo intelligent et à vos recommandations.</p>
 
-                <form id="login-form" class="auth-form">
+                <form id="login-form" class="auth-form" autocomplete="off">
                     <div class="field field--password">
                         <label for="login-email">Email</label>
-                        <input id="login-email" name="email" type="email" placeholder="vous@example.com" required />
+                        <input id="login-email" name="email" type="email" placeholder="vous@example.com" autocomplete="off" required />
                     </div>
                     <div class="field field--password">
                         <label for="login-password">Mot de passe</label>
                         <div class="password-input-wrap">
-                            <input id="login-password" name="password" type="password" placeholder="••••••••" required />
+                            <input id="login-password" name="password" type="password" placeholder="••••••••" autocomplete="new-password" required />
                             <button type="button" class="password-toggle" data-target="login-password">Voir</button>
                         </div>
                     </div>
@@ -39,15 +39,15 @@ def render_auth_page() -> HTMLResponse:
                 <h2>Créer un compte</h2>
                 <p>Commencez à organiser votre alimentation et vos achats plus intelligemment.</p>
 
-                <form id="register-form" class="auth-form">
+                <form id="register-form" class="auth-form" autocomplete="off">
                     <div class="field field--password">
                         <label for="register-email">Email</label>
-                        <input id="register-email" name="email" type="email" placeholder="nouveau@example.com" required />
+                        <input id="register-email" name="email" type="email" placeholder="nouveau@example.com" autocomplete="off" required />
                     </div>
                     <div class="field field--password">
                         <label for="register-password">Mot de passe</label>
                         <div class="password-input-wrap">
-                            <input id="register-password" name="password" type="password" placeholder="Minimum 6 caractères" required />
+                            <input id="register-password" name="password" type="password" placeholder="Minimum 6 caractères" autocomplete="new-password" required />
                             <button type="button" class="password-toggle" data-target="register-password">Voir</button>
                         </div>
                     </div>
@@ -68,8 +68,20 @@ def render_auth_page() -> HTMLResponse:
                 });
             }
 
+            function clearAuthForms() {
+                const forms = ['login-form', 'register-form'];
+                forms.forEach((formId) => {
+                    const form = document.getElementById(formId);
+                    if (form) {
+                        form.reset();
+                    }
+                });
+            }
+
             document.querySelectorAll('.password-toggle').forEach(attachPasswordToggle);
             localStorage.removeItem('smartfridge_token');
+            clearAuthForms();
+            window.addEventListener('pageshow', clearAuthForms);
 
             function formatErrorMessage(detail) {
                 if (!detail) return 'Une erreur est survenue.';
