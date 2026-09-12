@@ -8,7 +8,7 @@ from app.routers.profile import router as profile_router
 from app.web.data import fridge_items, get_themealdb_recipes, get_usda_foods
 from app.web.layout import register_auth_middleware
 from app.web.pages.alerts import router as alerts_pages_router
-from app.web.pages.auth import router as auth_pages_router
+from app.web.pages.authentification import router as auth_pages_router
 from app.web.pages.fridge import router as fridge_pages_router
 from app.web.pages.home import router as home_pages_router
 from app.web.pages.nutrition import router as nutrition_pages_router
