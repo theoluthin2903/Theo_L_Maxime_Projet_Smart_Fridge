@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Float, Integer, String
 from app.db.database import Base
 
 
@@ -8,6 +8,13 @@ class UserDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+
+    age = Column(Integer, nullable=True)
+    weight = Column(Float, nullable=True)
+    height = Column(Float, nullable=True)
+    sex = Column(String, nullable=True)
+    activity = Column(String, nullable=True)
+    goal = Column(String, nullable=True)
 
 
 class FridgeItemDB(Base):

@@ -24,6 +24,26 @@ def ensure_fridge_user_id_column():
             conn.execute(text("ALTER TABLE fridge_items ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0"))
 
 
+def ensure_user_profile_columns():
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        if "users" not in inspector.get_table_names():
+            return
+
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        new_columns = {
+            "age": "INTEGER",
+            "weight": "FLOAT",
+            "height": "FLOAT",
+            "sex": "VARCHAR",
+            "activity": "VARCHAR",
+            "goal": "VARCHAR",
+        }
+        for name, col_type in new_columns.items():
+            if name not in columns:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {col_type}"))
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -33,3 +53,4 @@ def get_db():
 
 
 ensure_fridge_user_id_column()
+ensure_user_profile_columns()

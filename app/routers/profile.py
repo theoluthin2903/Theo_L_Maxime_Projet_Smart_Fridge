@@ -1,37 +1,49 @@
-from fastapi import APIRouter
-from app.models.profile import UserProfile
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.core.dependencies import get_current_user
+from app.core.metabolism import compute_bmr_tdee
+from app.db.database import get_db
+from app.db.models import UserDB
+from app.models.profile import ProfileUpdate
 
 router = APIRouter(prefix="/profile", tags=["Profile"])
 
-@router.post("/calculate")
-def calculate_profile(data: UserProfile):
 
-    if data.sex == "male":
-        tmb = 10 * data.weight + 6.25 * data.height - 5 * data.age + 5
-    else:
-        tmb = 10 * data.weight + 6.25 * data.height - 5 * data.age - 161
-
-    activity_factor = 1.4
-    maintenance = tmb * activity_factor
-
-    if data.objective == "lose":
-        calories = maintenance - 300
-    elif data.objective == "gain":
-        calories = maintenance + 300
-    else:
-        calories = maintenance
-
-    proteins = data.weight * 2.2
-    fats = data.weight * 1
-    carbs = (calories - (proteins * 4 + fats * 9)) / 4
-
+def _serialize(user: UserDB) -> dict:
     return {
-        "tmb": round(tmb),
-        "maintenance": round(maintenance),
-        "calories_target": round(calories),
-        "macros": {
-            "proteins_g": round(proteins),
-            "fats_g": round(fats),
-            "carbs_g": round(carbs)
-        }
+        "age": user.age,
+        "weight": user.weight,
+        "height": user.height,
+        "sex": user.sex,
+        "activity": user.activity,
+        "goal": user.goal,
     }
+
+
+def _with_nutrition(user: UserDB) -> dict:
+    data = _serialize(user)
+    if all([user.age, user.weight, user.height, user.sex, user.activity, user.goal]):
+        data["nutrition"] = compute_bmr_tdee(user)
+    return data
+
+
+@router.get("/me")
+def get_my_profile(user: UserDB = Depends(get_current_user)):
+    return _with_nutrition(user)
+
+
+@router.put("/me")
+def update_my_profile(
+    data: ProfileUpdate,
+    user: UserDB = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return _with_nutrition(user)
