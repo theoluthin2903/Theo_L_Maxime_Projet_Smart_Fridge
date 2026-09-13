@@ -133,12 +133,16 @@ def get_themealdb_recipes(ingredient: str, limit: int = 3):
             continue
 
         d = (detail.get("meals") or [{}])[0]
+        description = (d.get("strInstructions") or "Aucune description disponible.").strip()
+        if not description:
+            description = "Aucune description disponible."
+
         result.append(
             {
                 "name": d.get("strMeal", meal.get("strMeal", "Recette")),
                 "time": d.get("strArea", "Inconnu"),
                 "difficulty": "Facile",
-                "description": d.get("strInstructions", "Aucune description disponible.")[:160],
+                "description": description,
             }
         )
 
