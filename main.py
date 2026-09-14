@@ -15,7 +15,9 @@ from app.web.pages.nutrition import router as nutrition_pages_router
 from app.web.pages.products import router as products_pages_router
 from app.web.pages.profile import router as profile_pages_router
 
-Base.metadata.create_all(bind=engine)
+# No automatic DB mutation on startup.
+# If you really need one-off schema creation/migration, set
+# SMARTFRIDGE_RUN_MIGRATIONS=1 before launching the app.
 
 app = FastAPI(title="Smart Fridge & Nutrition Coach")
 app.mount("/static", StaticFiles(directory="static"), name="static")
