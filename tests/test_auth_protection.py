@@ -75,3 +75,11 @@ def test_password_must_be_at_least_6_characters():
         json={"email": email, "password": "12345"},
     )
     assert login.status_code == 422
+
+
+def test_auth_dark_theme_has_specific_css_rules():
+    css = open("static/styles.css", encoding="utf-8").read()
+
+    assert "html.dark .auth-shell" in css
+    assert "html.dark .auth-card--green" in css
+    assert "html.dark .auth-card--dark" in css
