@@ -5,11 +5,20 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 
 from app.core.admin import get_current_admin
+from app.core.security import hash_password
 from app.db.database import SessionLocal
-from app.db.models import FridgeItemDB, UserDB
+from app.db.models import AdminLogDB, FridgeItemDB, UserDB
 from app.web.layout import render_page
 
 router = APIRouter()
+
+
+def log_action(db, admin_id: int, action: str, target: str = "", details: str = ""):
+    db.add(AdminLogDB(
+        admin_user_id=admin_id, action=action, target=target or None,
+        details=details or None, created_at=__import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ))
+
 
 
 def admin_guard(request: Request):
@@ -28,6 +37,7 @@ def admin_dashboard(request: Request):
     with SessionLocal() as db:
         users = db.query(UserDB).order_by(UserDB.id.asc()).all()
         fridge_items = db.query(FridgeItemDB).order_by(FridgeItemDB.id.desc()).all()
+        logs = db.query(AdminLogDB).order_by(AdminLogDB.id.desc()).limit(10).all()
         user_by_id = {u.id: u.email for u in users}
 
         rows = []
@@ -66,7 +76,37 @@ def admin_dashboard(request: Request):
                 </tr>
             ''')
 
+    total_users = len(users)
+    total_admins = sum(bool(u.is_admin) for u in users)
+    today = __import__("datetime").date.today()
+    expiring = 0
+    expired = 0
+    for item in fridge_items:
+        try:
+            d = __import__("datetime").datetime.strptime(item.expiration_date, "%Y-%m-%d").date()
+            if d < today:
+                expired += 1
+            elif d <= today + __import__("datetime").timedelta(days=7):
+                expiring += 1
+        except (TypeError, ValueError):
+            pass
+
     body = f'''
+        <div class="admin-hero">
+            <div>
+                <div class="admin-kicker">SMART FRIDGE • ADMIN</div>
+                <h1>Centre d’administration</h1>
+                <p>Gestion des utilisateurs, des frigos et de la sécurité.</p>
+            </div>
+            <a href="/" class="admin-btn admin-btn--light">← Retour au site</a>
+        </div>
+        <div class="admin-stats">
+            <div class="admin-stat"><span>👥</span><div><small>Utilisateurs</small><strong>{total_users}</strong></div></div>
+            <div class="admin-stat"><span>🛡️</span><div><small>Admins</small><strong>{total_admins}</strong></div></div>
+            <div class="admin-stat"><span>🥫</span><div><small>Produits</small><strong>{len(fridge_items)}</strong></div></div>
+            <div class="admin-stat admin-stat--warning"><span>⚠️</span><div><small>Expire bientôt</small><strong>{expiring}</strong></div></div>
+            <div class="admin-stat admin-stat--danger"><span>🔴</span><div><small>Périmés</small><strong>{expired}</strong></div></div>
+        </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <div class="text-sm font-bold uppercase tracking-wider text-emerald-600">Administration</div>
@@ -98,6 +138,13 @@ def admin_dashboard(request: Request):
                 </table>
             </div>
         </section>
+        <section class="rounded-2xl bg-white p-6 shadow-sm dark:bg-slate-800">
+            <h2 class="text-xl font-black">📝 Activité administrative</h2>
+            <p class="mb-4 text-sm text-slate-500 dark:text-slate-300">Les dernières actions importantes sont enregistrées ici.</p>
+            <div class="space-y-3">
+                {''.join(f'<div class="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><strong>{escape(log.action)}</strong><div class="text-sm text-slate-500">{escape(log.details or "")}</div><div class="text-xs text-slate-400">{escape(log.created_at)}</div></div>' for log in logs) or '<div class="text-slate-500">Aucune activité.</div>'}
+            </div>
+        </section>
     '''
     return render_page("Administration", "/admin", body, request)
 
@@ -122,6 +169,15 @@ def edit_user_page(user_id: int, request: Request):
                 <label class="flex items-center gap-3"><input name="is_admin" type="checkbox" value="1" {'checked' if user.is_admin else ''} {'disabled' if user.id == admin.id else ''} class="h-5 w-5" /><span class="font-semibold">Compte administrateur</span></label>
                 <button class="rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Enregistrer les modifications</button>
             </form>
+            <div class="mt-8 border-t border-slate-200 pt-6 dark:border-slate-700">
+                <h2 class="mb-1 text-xl font-black">🔑 Réinitialiser le mot de passe</h2>
+                <p class="mb-4 text-sm text-slate-500 dark:text-slate-300">Le mot de passe sera haché avant d'être enregistré.</p>
+                <form method="post" action="/admin/users/{user.id}/password" class="grid gap-4 md:grid-cols-2">
+                    <input name="password" type="password" minlength="6" required placeholder="Nouveau mot de passe" class="w-full rounded-xl border border-slate-300 p-3 dark:border-slate-600 dark:bg-slate-900" />
+                    <input name="password_confirm" type="password" minlength="6" required placeholder="Confirmer le mot de passe" class="w-full rounded-xl border border-slate-300 p-3 dark:border-slate-600 dark:bg-slate-900" />
+                    <button class="rounded-xl bg-slate-800 px-5 py-3 font-bold text-white hover:bg-slate-900 md:col-span-2">Réinitialiser</button>
+                </form>
+            </div>
         '''
     return render_page("Modifier utilisateur", "/admin", body, request)
 
@@ -163,12 +219,33 @@ async def update_user(user_id: int, request: Request):
         if user.id != admin.id:
             user.is_admin = 1 if form.get("is_admin") else 0
 
+        log_action(db, admin.id, "Utilisateur modifié", f"#{user.id}", user.email)
         try:
             db.commit()
         except IntegrityError:
             db.rollback()
             return RedirectResponse(f"/admin/users/{user_id}?error=email_used", status_code=303)
 
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/users/{user_id}/password")
+async def reset_user_password(user_id: int, request: Request):
+    admin = admin_guard(request)
+    if not admin:
+        return RedirectResponse("/", status_code=302)
+    form = await request.form()
+    password = str(form.get("password", ""))
+    confirmation = str(form.get("password_confirm", ""))
+    if len(password) < 6 or password != confirmation:
+        return RedirectResponse(f"/admin/users/{user_id}?error=password", status_code=303)
+    with SessionLocal() as db:
+        user = db.query(UserDB).filter(UserDB.id == user_id).first()
+        if not user:
+            return RedirectResponse("/admin", status_code=303)
+        user.hashed_password = hash_password(password)
+        log_action(db, admin.id, "Mot de passe réinitialisé", f"#{user.id}", user.email)
+        db.commit()
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -185,6 +262,7 @@ def delete_user(user_id: int, request: Request):
         if user:
             db.query(FridgeItemDB).filter(FridgeItemDB.user_id == user_id).delete(synchronize_session=False)
             db.delete(user)
+            log_action(db, admin.id, "Utilisateur supprimé", f"#{user_id}", email)
             db.commit()
 
     return RedirectResponse("/admin", status_code=303)
@@ -200,6 +278,7 @@ def delete_fridge_item(item_id: int, request: Request):
         item = db.query(FridgeItemDB).filter(FridgeItemDB.id == item_id).first()
         if item:
             db.delete(item)
+            log_action(db, admin.id, "Produit supprimé", f"#{item_id}", item.name)
             db.commit()
 
     return RedirectResponse("/admin", status_code=303)

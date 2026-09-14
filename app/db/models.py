@@ -27,3 +27,13 @@ class FridgeItemDB(Base):
     expiration_date = Column(String, default="")
     category = Column(String, default="")
     notes = Column(String, default="")
+
+class AdminLogDB(Base):
+    __tablename__ = "admin_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_user_id = Column(Integer, nullable=False, index=True)
+    action = Column(String, nullable=False)
+    target = Column(String, nullable=True)
+    details = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
