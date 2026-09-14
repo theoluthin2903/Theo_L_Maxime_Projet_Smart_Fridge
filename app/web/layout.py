@@ -118,6 +118,18 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
         </form>
     """ if is_logged_in else ""
 
+    theme_toggle_button = """
+        <button
+            type="button"
+            id="theme-toggle"
+            onclick="toggleTheme()"
+            class="mt-4 flex w-full items-center justify-between rounded-xl bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/15"
+        >
+            <span>Mode sombre</span>
+            <span id="theme-toggle-icon" aria-hidden="true">🌙</span>
+        </button>
+    """
+
     return HTMLResponse(
         f"""
         <!DOCTYPE html>
@@ -126,9 +138,20 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
             <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
             <title>{title}</title>
+            <script>
+                (function () {{
+                    var stored = localStorage.getItem('theme');
+                    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    var theme = stored || (prefersDark ? 'dark' : 'light');
+                    if (theme === 'dark') {{
+                        document.documentElement.classList.add('dark');
+                    }}
+                }})();
+            </script>
             <script src="https://cdn.tailwindcss.com"></script>
             <script>
                 tailwind.config = {{
+                    darkMode: 'class',
                     theme: {{
                         extend: {{
                             colors: {{
@@ -144,15 +167,16 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                     }}
                 }}
             </script>
-            <link rel="stylesheet" href="/static/styles.css" />
+            <link rel="stylesheet" href="/static/styles.css?v=3" />
         </head>
-        <body class="bg-green-50 text-slate-800 antialiased">
+        <body class="bg-green-50 text-slate-800 antialiased transition-colors duration-200 dark:bg-slate-900 dark:text-slate-100">
             <div class="flex min-h-screen flex-col md:flex-row">
-                <aside class="w-full bg-gradient-to-b from-green-800 to-green-600 p-6 text-white md:w-64">
+                <aside class="w-full bg-gradient-to-b from-green-800 to-green-600 p-6 text-white transition-colors duration-200 dark:from-slate-800 dark:to-slate-950 md:w-64">
                     <div class="mb-8 text-2xl font-black">Smart Fridge</div>
                     <nav class="flex flex-col gap-3">
                         {nav(active)}
                     </nav>
+                    {theme_toggle_button}
                     {welcome_block}
                     {logout_button}
                 </aside>
@@ -162,6 +186,20 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                     </div>
                 </main>
             </div>
+            <script>
+                function toggleTheme() {{
+                    var isDark = document.documentElement.classList.toggle('dark');
+                    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                    updateThemeIcon();
+                }}
+                function updateThemeIcon() {{
+                    var icon = document.getElementById('theme-toggle-icon');
+                    if (icon) {{
+                        icon.textContent = document.documentElement.classList.contains('dark') ? '🌙' : '☀️';
+                    }}
+                }}
+                document.addEventListener('DOMContentLoaded', updateThemeIcon);
+            </script>
         </body>
         </html>
         """
