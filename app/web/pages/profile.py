@@ -163,14 +163,26 @@ def _render_profile_body(user: UserDB | None, message: str = "") -> str:
 
 @router.get("/profile", response_class=HTMLResponse)
 def profile_page(request: Request):
-    redirect = require_auth(request)
-    if redirect:
-        return redirect
-
     user_id = get_user_id_from_cookie(request)
     with SessionLocal() as db:
         user = db.query(UserDB).filter(UserDB.id == user_id).first() if user_id else None
-        body = _render_profile_body(user)
+        if user_id:
+            body = _render_profile_body(user)
+        else:
+            body = """
+                <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+                    <h1 class="mb-5 text-3xl font-bold text-slate-800">Profil</h1>
+                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-5">
+                        <h2 class="text-xl font-bold text-amber-800">Veuillez vous connecter pour compléter votre profil</h2>
+                        <p class="mt-2 text-sm text-amber-700">
+                            Vous pouvez consulter le site en mode visiteur, mais vous devez être connecté pour renseigner vos informations personnelles et enregistrer votre profil.
+                        </p>
+                        <a href="/login" class="mt-4 inline-flex rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-800">
+                            Se connecter
+                        </a>
+                    </div>
+                </div>
+            """
 
     return render_page("Profil", "/profile", body, request)
 
