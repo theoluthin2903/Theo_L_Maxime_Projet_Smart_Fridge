@@ -158,11 +158,67 @@ button, input, textarea {
   color: white;
 }
 
+html.dark .auth-shell {
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.18), transparent 35%),
+    radial-gradient(circle at bottom right, rgba(22, 163, 74, 0.1), transparent 30%),
+    #020817;
+}
+
+html.dark .auth-card {
+  background: rgba(15, 23, 42, 0.84);
+  border-color: rgba(148, 163, 184, 0.18);
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.45);
+}
+
+html.dark .auth-card--green {
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.9), rgba(15, 23, 42, 0.96));
+  border-color: rgba(34, 197, 94, 0.2);
+  color: #e2e8f0;
+}
+
+html.dark .auth-card--dark {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
+  color: #f8fafc;
+}
+
+html.dark .auth-card p,
+html.dark .auth-card h1,
+html.dark .auth-card h2,
+html.dark .auth-card h3 {
+  color: inherit;
+}
+
+html.dark .auth-badge {
+  background: rgba(34, 197, 94, 0.18);
+  color: #bbf7d0;
+}
+
+html.dark .auth-badge--light {
+  background: rgba(255, 255, 255, 0.08);
+  color: #d1fae5;
+}
+
+html.dark .field label,
+html.dark .auth-card--dark .field label {
+  color: rgba(255,255,255,0.9);
+}
+
+html.dark .password-toggle {
+  background: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+}
+
+.auth-card h2 {
+  color: #f8fafc;
+}
+
 .auth-card h1,
-.auth-card h2,
-.auth-card h3,
+.auth-card h3,  
 .auth-card p {
   margin-top: 0;
+  color: #000000;
+
 }
 
 .auth-card h1,
