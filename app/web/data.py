@@ -288,179 +288,92 @@ def get_usda_foods(query: str, limit: int = 3):
 
 
 
-# Valeurs locales de secours pour les aliments courants.
-LOCAL_NUTRITION = {
-    "lait": {"name": "Lait", "category": "Produits laitiers", "calories": 122, "proteines": 8.1, "glucides": 12.0, "lipides": 4.8},
-    "pomme": {"name": "Pomme", "category": "Fruits et légumes", "calories": 95, "proteines": 0.5, "glucides": 25.1, "lipides": 0.3},
-    "pommes": {"name": "Pomme", "category": "Fruits et légumes", "calories": 95, "proteines": 0.5, "glucides": 25.1, "lipides": 0.3},
-    "oeuf": {"name": "Œuf", "category": "Autre", "calories": 72, "proteines": 6.3, "glucides": 0.4, "lipides": 4.8},
-    "oeufs": {"name": "Œuf", "category": "Autre", "calories": 72, "proteines": 6.3, "glucides": 0.4, "lipides": 4.8},
-    "riz": {"name": "Riz cuit", "category": "Céréales et grains", "calories": 205, "proteines": 4.3, "glucides": 44.5, "lipides": 0.4},
-    "pates": {"name": "Pâtes cuites", "category": "Céréales et grains", "calories": 220, "proteines": 8.1, "glucides": 43.2, "lipides": 1.3},
-    "pâtes": {"name": "Pâtes cuites", "category": "Céréales et grains", "calories": 220, "proteines": 8.1, "glucides": 43.2, "lipides": 1.3},
-    "poulet": {"name": "Poulet cuit", "category": "Viandes et poissons", "calories": 239, "proteines": 27.3, "glucides": 0.0, "lipides": 13.6},
-    "banane": {"name": "Banane", "category": "Fruits et légumes", "calories": 105, "proteines": 1.3, "glucides": 27.0, "lipides": 0.4},
-    "tomate": {"name": "Tomate", "category": "Fruits et légumes", "calories": 22, "proteines": 1.1, "glucides": 4.8, "lipides": 0.2},
-    "pain": {"name": "Pain", "category": "Céréales et grains", "calories": 79, "proteines": 2.7, "glucides": 14.7, "lipides": 1.0},
-    "fromage": {"name": "Fromage", "category": "Produits laitiers", "calories": 113, "proteines": 7.0, "glucides": 0.4, "lipides": 9.3},
-}
+def get_available_products(query: str = "", limit: int = 200):
+    """Retourne les produits réellement renvoyés par les APIs, sans données codées en dur."""
+    products: list[dict] = []
+    seen: set[str] = set()
 
-def get_local_food_nutrition(query: str):
-    key = normalize_name(query)
-    if key in LOCAL_NUTRITION:
-        return LOCAL_NUTRITION[key].copy()
-    for alias, food in LOCAL_NUTRITION.items():
-        if alias in key or key in alias:
-            return food.copy()
-    return None
+    def add_product(name: str, category: str = "Autre"):
+        cleaned = (name or "").strip()
+        if not cleaned:
+            return
+        key = normalize_name(cleaned)
+        if key and key not in seen:
+            seen.add(key)
+            products.append({
+                "name": cleaned,
+                "category": (category or "Autre").strip() or "Autre",
+            })
 
+    search_terms = [query.strip()] if query and query.strip() else [
+        "milk", "apple", "tomato", "chicken", "bread", "rice", "egg", "cheese",
+        "fish", "pasta", "banana", "yogurt", "beef", "salad", "mushroom",
+        "carrot", "lentil", "bean", "orange", "onion", "garlic", "potato",
+        "spinach", "lemon", "olive", "pepper", "salmon", "shrimp", "tuna",
+        "chickpea", "lentils", "mustard", "butter", "flour", "sugar", "oil",
+        "cucumber", "lettuce", "broccoli", "pear", "strawberry", "parsley",
+        "thyme", "basil", "paprika", "vanilla", "chocolate"
+    ]
 
-def get_openfoodfacts_nutrition(query: str):
-    """Recherche un produit dans Open Food Facts quand les données locales/USDA ne suffisent pas."""
-    if not query:
-        return None
+    for term in search_terms:
+        term = (term or "").strip()
+        if not term:
+            continue
+
+        for item in get_usda_foods(term, limit=12):
+            add_product(item.get("name", ""), item.get("category", "Autre"))
 
     try:
-        data = fetch_json(
-            "https://world.openfoodfacts.org/api/v2/search",
-            params={
-                "search_terms": query,
-                "page_size": 1,
-                "fields": "product_name,nutriments,categories_tags",
-            },
+        meal_db = fetch_json(
+            "https://www.themealdb.com/api/json/v1/1/list.php",
+            params={"i": "list"},
             timeout=8,
         )
+        for ingredient in (meal_db.get("meals") or []):
+            ingredient_name = (ingredient.get("strIngredient") or "").strip()
+            if ingredient_name:
+                add_product(ingredient_name, "Ingrédient")
     except Exception:
-        return None
+        pass
 
-    products = data.get("products") or []
-    if not products:
-        return None
+    if query:
+        filtered = [
+            product for product in products
+            if normalize_name(query) in normalize_name(product["name"]) or normalize_name(product["name"]) in normalize_name(query)
+        ]
+        return filtered[:limit]
 
-    product = products[0]
-    nutriments = product.get("nutriments") or {}
-
-    def number(*keys):
-        for key in keys:
-            value = nutriments.get(key)
-            try:
-                if value is not None and value != "":
-                    return float(value)
-            except (TypeError, ValueError):
-                pass
-        return 0.0
-
-    name = product.get("product_name") or query
-    categories = " ".join(product.get("categories_tags") or [])
-
-    return {
-        "name": name,
-        "category": _normalize_category(categories),
-        "calories": number(
-            "energy-kcal_100g",
-            "energy-kcal_value",
-        ),
-        "proteines": number("proteins_100g"),
-        "glucides": number("carbohydrates_100g"),
-        "lipides": number("fat_100g"),
-    }
+    return sorted(products, key=lambda item: item["name"].lower())[:limit]
 
 
-def get_generic_food_nutrition(query: str):
-    """
-    Dernier secours : fournit une estimation générique pour qu'un nouveau
-    produit ne reste jamais sans affichage nutritionnel.
-    Les valeurs sont des estimations pour 100 g, pas des valeurs exactes.
-    """
-    key = normalize_name(query)
+def get_available_product_names(query: str = "", limit: int = 200):
+    products = get_available_products(query=query, limit=limit)
+    return [product["name"] for product in products]
 
-    # Estimations génériques par grande famille.
-    if any(word in key for word in [
-        "lait", "yaourt", "yogourt", "fromage", "beurre", "creme"
-    ]):
-        return {
-            "name": query,
-            "category": "Produits laitiers",
-            "calories": 150,
-            "proteines": 5,
-            "glucides": 12,
-            "lipides": 8,
-            "estimated": True,
-        }
-
-    if any(word in key for word in [
-        "poulet", "boeuf", "bœuf", "porc", "jambon",
-        "dinde", "viande", "poisson", "saumon", "thon"
-    ]):
-        return {
-            "name": query,
-            "category": "Viandes et poissons",
-            "calories": 200,
-            "proteines": 25,
-            "glucides": 0,
-            "lipides": 10,
-            "estimated": True,
-        }
-
-    if any(word in key for word in [
-        "pomme", "banane", "orange", "poire", "fraise",
-        "fruit", "tomate", "carotte", "salade", "legume",
-        "légume", "courgette", "brocoli"
-    ]):
-        return {
-            "name": query,
-            "category": "Fruits et légumes",
-            "calories": 60,
-            "proteines": 1,
-            "glucides": 13,
-            "lipides": 0.3,
-            "estimated": True,
-        }
-
-    if any(word in key for word in [
-        "riz", "pate", "pâtes", "pain", "farine", "cereale",
-        "céréale", "avoine", "semoule"
-    ]):
-        return {
-            "name": query,
-            "category": "Céréales et grains",
-            "calories": 200,
-            "proteines": 6,
-            "glucides": 40,
-            "lipides": 2,
-            "estimated": True,
-        }
-
-    # Produit totalement inconnu : estimation neutre.
-    return {
-        "name": query,
-        "category": "Autre",
-        "calories": 150,
-        "proteines": 5,
-        "glucides": 20,
-        "lipides": 5,
-        "estimated": True,
-    }
 
 def get_food_nutrition(query: str):
-    # 1. Base locale : rapide et fiable pour les aliments courants.
-    local = get_local_food_nutrition(query)
-    if local:
-        return local
+    if not query:
+        return {
+            "name": "",
+            "category": "Autre",
+            "calories": 0,
+            "proteines": 0,
+            "glucides": 0,
+            "lipides": 0,
+        }
 
-    # 2. USDA si une clé API est configurée.
     foods = get_usda_foods(query, limit=1)
     if foods:
         return foods[0]
 
-    # 3. Open Food Facts : fonctionne sans clé API pour beaucoup de produits.
-    off = get_openfoodfacts_nutrition(query)
-    if off:
-        return off
-
-    # 4. Dernier secours : estimation locale pour ne jamais laisser
-    #    la carte "Données indisponibles".
-    return get_generic_food_nutrition(query)
+    return {
+        "name": query,
+        "category": "Autre",
+        "calories": 0,
+        "proteines": 0,
+        "glucides": 0,
+        "lipides": 0,
+    }
 
 def get_themealdb_recipes(ingredient: str, limit: int = 3):
     if not ingredient:

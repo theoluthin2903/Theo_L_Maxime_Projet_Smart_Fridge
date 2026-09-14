@@ -20,7 +20,7 @@ def get_token_from_request(request: Request) -> str | None:
 
 
 def require_auth(request: Request) -> RedirectResponse | None:
-    if request.method.upper() == "GET":
+    if request.method.upper() in {"GET", "HEAD", "OPTIONS"}:
         return None
 
     token = get_token_from_request(request)

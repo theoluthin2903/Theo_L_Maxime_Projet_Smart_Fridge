@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse
 from app.web.data import (
     add_fridge_item,
     delete_fridge_item,
+    get_available_products,
     get_fridge_search_query,
     get_themealdb_recipes,
     get_usda_foods,
@@ -68,15 +69,24 @@ def fridge_page(request: Request):
     """
     form_disabled = "" if is_logged_in else "disabled"
     add_button = "Ajouter au frigo" if is_logged_in else "Ajouter au Frigo"
+    product_options = get_available_products(limit=200)
+    options_html = "".join(
+        f'<option value="{product["name"]}" data-category="{product["category"]}">{product["name"]}</option>'
+        for product in product_options
+    )
 
     body = f"""
         {visitor_notice}
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h1 class="mb-5 text-3xl font-bold text-slate-800">Mon frigo</h1>
             <form method="post" action="/fridge" class="grid gap-4 md:grid-cols-2">
-                <div class="flex flex-col gap-2">
-                    <label for="name" class="font-semibold text-slate-700">Nom</label>
-                    <input id="name" name="name" placeholder="Ex : Lait" required class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none ring-0 focus:border-green-500" {form_disabled} />
+                <div class="flex flex-col gap-2 md:col-span-2">
+                    <label for="product-search" class="font-semibold text-slate-700">Produit</label>
+                    <input id="product-search" type="search" placeholder="Rechercher un produit..." class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled} />
+                    <select id="name" name="name" required class="mt-2 min-h-[150px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none ring-0 focus:border-green-500" size="10" {form_disabled}>
+                        <option value="">Choisir un produit</option>
+                        {options_html}
+                    </select>
                 </div>
                 <div class="flex flex-col gap-2">
                     <label for="quantity" class="font-semibold text-slate-700">Quantité</label>
@@ -99,6 +109,42 @@ def fridge_page(request: Request):
                 </div>
             </form>
         </div>
+        <script>
+            const productSearch = document.getElementById('product-search');
+            const productSelect = document.getElementById('name');
+            const categoryInput = document.getElementById('category');
+            if (productSearch && productSelect && categoryInput) {{
+                const syncCategory = () => {{
+                    const selected = productSelect.selectedOptions[0] || productSelect.options[productSelect.selectedIndex];
+                    const category = selected && selected.getAttribute('data-category') ? selected.getAttribute('data-category') : '';
+                    categoryInput.value = category;
+                }};
+                const filterOptions = () => {{
+                    const term = productSearch.value.trim().toLowerCase();
+                    Array.from(productSelect.options).forEach((option) => {{
+                        if (!option.value) {{
+                            option.hidden = false;
+                            return;
+                        }}
+                        const optionText = option.text.toLowerCase();
+                        option.hidden = term !== '' && !optionText.includes(term);
+                    }});
+                    const visible = Array.from(productSelect.options).filter((option) => !option.hidden && option.value);
+                    if (visible.length > 0) {{
+                        productSelect.value = visible[0].value;
+                        syncCategory();
+                    }} else {{
+                        categoryInput.value = '';
+                    }}
+                }};
+                productSelect.addEventListener('change', syncCategory);
+                productSelect.addEventListener('input', syncCategory);
+                productSelect.addEventListener('click', syncCategory);
+                productSelect.addEventListener('keyup', syncCategory);
+                productSearch.addEventListener('input', filterOptions);
+                filterOptions();
+            }}
+        </script>
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h2 class="mb-4 text-2xl font-bold text-slate-800">Contenu actuel</h2>
             <ul class="space-y-3">{items_html}</ul>

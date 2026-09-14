@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.web.layout import require_auth, render_page
+from app.web.layout import get_token_from_request, require_auth, render_page
 
 router = APIRouter()
 
 
 @router.get("/", response_class=HTMLResponse)
 def home_page(request: Request):
+    if not get_token_from_request(request):
+        return RedirectResponse(url="/login", status_code=302)
+
     redirect = require_auth(request)
     if redirect:
         return redirect
