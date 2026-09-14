@@ -179,20 +179,126 @@ def _extract_usda_nutrient_value(nutrients, names=None, nutrient_ids=None):
 
 
 def _normalize_category(category: str):
+    """Normalise une catégorie brute provenant d'une API."""
     value = (category or "").strip()
     lowered = value.lower()
 
-    if any(keyword in lowered for keyword in ["fruit", "vegetable", "vegetables", "legume", "tomato"]):
-        return "Fruits et légumes"
-    if any(keyword in lowered for keyword in ["dairy", "milk", "egg", "cheese", "yogurt"]):
+    if any(keyword in lowered for keyword in ["fruit"]):
+        return "Fruits"
+    if any(keyword in lowered for keyword in ["vegetable", "vegetables", "tomato"]):
+        return "Légumes"
+    if any(keyword in lowered for keyword in ["dairy", "milk", "cheese", "yogurt"]):
         return "Produits laitiers"
-    if any(keyword in lowered for keyword in ["beef", "meat", "poultry", "fish", "seafood"]):
-        return "Viandes et poissons"
-    if any(keyword in lowered for keyword in ["grain", "bread", "cereal", "flour", "pasta"]):
-        return "Céréales et grains"
-    if any(keyword in lowered for keyword in ["dessert", "sweets", "cookie", "cake"]):
-        return "Desserts"
+    if any(keyword in lowered for keyword in ["egg"]):
+        return "Œufs"
+    if any(keyword in lowered for keyword in ["beef", "meat", "poultry", "chicken", "pork", "lamb"]):
+        return "Viandes et volailles"
+    if any(keyword in lowered for keyword in ["fish", "seafood", "shellfish"]):
+        return "Poissons et fruits de mer"
+    if any(keyword in lowered for keyword in ["grain", "cereal", "rice", "pasta"]):
+        return "Féculents et céréales"
+    if any(keyword in lowered for keyword in ["bread", "bakery"]):
+        return "Pain et boulangerie"
+    if any(keyword in lowered for keyword in ["legume", "bean", "lentil", "pea"]):
+        return "Légumineuses"
+    if any(keyword in lowered for keyword in ["dessert", "sweets", "cookie", "cake", "chocolate", "candy"]):
+        return "Produits sucrés"
+    if any(keyword in lowered for keyword in ["beverage", "drink", "juice"]):
+        return "Boissons"
+    if any(keyword in lowered for keyword in ["oil", "fat", "butter", "margarine"]):
+        return "Matières grasses"
+
     return value or "Autre"
+
+
+def _infer_product_category(name: str, raw_category: str = "") -> str:
+    """Déduit automatiquement une catégorie cohérente depuis le nom du produit."""
+    text = normalize_name(name)
+    raw = (raw_category or "").strip()
+
+    category_keywords = [
+        ("Fruits", [
+            "apple", "banana", "orange", "lemon", "lime", "pear", "peach",
+            "apricot", "plum", "grape", "strawberry", "raspberry", "blueberry",
+            "blackberry", "cherry", "mango", "pineapple", "kiwi", "melon",
+            "watermelon", "coconut", "avocado", "fig", "date", "pomegranate",
+        ]),
+        ("Légumes", [
+            "tomato", "carrot", "onion", "garlic", "potato", "sweet potato",
+            "cucumber", "lettuce", "salad", "spinach", "broccoli", "cauliflower",
+            "cabbage", "zucchini", "courgette", "eggplant", "aubergine",
+            "pepper", "bell pepper", "mushroom", "celery", "leek", "beet",
+            "radish", "asparagus", "artichoke", "pumpkin", "squash", "corn",
+        ]),
+        ("Produits laitiers", [
+            "milk", "cheese", "yogurt", "yoghurt", "cream", "creme",
+            "mozzarella", "parmesan", "cheddar", "ricotta", "feta",
+            "mascarpone", "cottage cheese",
+        ]),
+        ("Œufs", ["egg", "eggs"]),
+        ("Viandes et volailles", [
+            "chicken", "turkey", "beef", "steak", "pork", "ham", "bacon",
+            "lamb", "veal", "duck", "sausage", "minced meat", "ground beef",
+        ]),
+        ("Poissons et fruits de mer", [
+            "fish", "salmon", "tuna", "cod", "haddock", "trout", "sardine",
+            "mackerel", "shrimp", "prawn", "crab", "lobster", "mussel",
+            "oyster", "clam", "squid", "octopus", "anchovy",
+        ]),
+        ("Féculents et céréales", [
+            "rice", "pasta", "spaghetti", "macaroni", "noodle", "couscous",
+            "quinoa", "bulgur", "oat", "oats", "barley", "wheat", "semolina",
+            "polenta", "cereal",
+        ]),
+        ("Pain et boulangerie", [
+            "bread", "baguette", "bun", "roll", "tortilla", "pita", "croissant",
+            "brioche", "toast",
+        ]),
+        ("Légumineuses", [
+            "lentil", "lentils", "bean", "beans", "chickpea", "chickpeas",
+            "pea", "peas", "kidney bean", "black bean", "soybean",
+        ]),
+        ("Herbes et épices", [
+            "parsley", "basil", "thyme", "rosemary", "oregano", "coriander",
+            "cilantro", "mint", "sage", "dill", "paprika", "cumin", "curry",
+            "turmeric", "cinnamon", "nutmeg", "ginger", "peppercorn", "chili",
+            "chilli", "vanilla", "saffron",
+        ]),
+        ("Sauces et condiments", [
+            "mustard", "ketchup", "mayonnaise", "mayo", "soy sauce", "vinegar",
+            "sauce", "pesto", "relish", "stock", "broth", "bouillon",
+        ]),
+        ("Matières grasses", [
+            "butter", "margarine", "olive oil", "oil", "coconut oil",
+            "sunflower oil", "rapeseed oil",
+        ]),
+        ("Produits sucrés", [
+            "sugar", "chocolate", "honey", "jam", "jelly", "caramel",
+            "cookie", "biscuit", "cake", "candy", "syrup", "ice cream",
+        ]),
+        ("Farines et pâtisserie", [
+            "flour", "baking powder", "baking soda", "yeast", "cornstarch",
+            "cocoa powder",
+        ]),
+        ("Fruits à coque et graines", [
+            "almond", "walnut", "hazelnut", "cashew", "pistachio", "peanut",
+            "pecan", "sesame", "chia", "flax", "sunflower seed", "pumpkin seed",
+        ]),
+        ("Boissons", [
+            "water", "juice", "coffee", "tea", "soda", "lemonade",
+            "smoothie", "drink",
+        ]),
+    ]
+
+    for category, keywords in category_keywords:
+        if any(keyword in text for keyword in keywords):
+            return category
+
+    normalized_raw = _normalize_category(raw)
+    if normalized_raw.lower() in {"ingrédient", "ingredient", "autre"}:
+        return "Autre"
+
+    return normalized_raw
 
 
 def _estimate_recipe_time(recipe: dict):
@@ -302,7 +408,7 @@ def get_available_products(query: str = "", limit: int = 200):
             seen.add(key)
             products.append({
                 "name": cleaned,
-                "category": (category or "Autre").strip() or "Autre",
+                "category": _infer_product_category(cleaned, category),
             })
 
     search_terms = [query.strip()] if query and query.strip() else [
