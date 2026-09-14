@@ -29,12 +29,9 @@ def get_user_id_from_cookie(request: Request):
 
 @router.get("/fridge", response_class=HTMLResponse)
 def fridge_page(request: Request):
-    redirect = require_auth(request)
-    if redirect:
-        return redirect
-
     user_id = get_user_id_from_cookie(request)
-    items = load_fridge_items(user_id)
+    is_logged_in = user_id is not None
+    items = load_fridge_items(user_id) if is_logged_in else []
     items_html = "".join(
         f"""
         <li class="rounded-xl border border-green-100 bg-green-50 p-4">
@@ -46,10 +43,10 @@ def fridge_page(request: Request):
                     <div class="mt-1 text-sm text-slate-500">Expiration : {item['expiration_date'] or '—'}</div>
                     <div class="mt-1 text-sm text-slate-500">{item['notes'] or 'Aucune note'}</div>
                 </div>
-                <form method="post" action="/fridge/delete">
-                    <input type="hidden" name="item_id" value="{item['id']}" />
-                    <button type="submit" class="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Supprimer</button>
-                </form>
+                {("<form method='post' action='/fridge/delete'>"
+                  f"<input type='hidden' name='item_id' value='{item['id']}' />"
+                  "<button type='submit' class='rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100'>Supprimer</button>"
+                  "</form>") if is_logged_in else ""}
             </div>
         </li>
         """
@@ -58,32 +55,47 @@ def fridge_page(request: Request):
     if not items_html:
         items_html = "<li class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-slate-500'>Votre frigo est vide pour le moment.</li>"
 
+    visitor_notice = "" if is_logged_in else """
+        <div class="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p class="font-semibold text-amber-800">Veuillez vous connecter pour compléter votre frigo</p>
+            <p class="mt-1 text-sm text-amber-700">
+                En mode visiteur, vous pouvez consulter la page, mais vous devez être connecté pour ajouter ou supprimer des aliments.
+            </p>
+            <a href="/login" class="mt-3 inline-flex rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800">
+                Se connecter
+            </a>
+        </div>
+    """
+    form_disabled = "" if is_logged_in else "disabled"
+    add_button = "Ajouter au frigo" if is_logged_in else "Ajouter au Frigo"
+
     body = f"""
+        {visitor_notice}
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h1 class="mb-5 text-3xl font-bold text-slate-800">Mon frigo</h1>
             <form method="post" action="/fridge" class="grid gap-4 md:grid-cols-2">
                 <div class="flex flex-col gap-2">
                     <label for="name" class="font-semibold text-slate-700">Nom</label>
-                    <input id="name" name="name" placeholder="Ex : Lait" required class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none ring-0 focus:border-green-500" />
+                    <input id="name" name="name" placeholder="Ex : Lait" required class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none ring-0 focus:border-green-500" {form_disabled} />
                 </div>
                 <div class="flex flex-col gap-2">
                     <label for="quantity" class="font-semibold text-slate-700">Quantité</label>
-                    <input id="quantity" name="quantity" type="number" min="1" value="1" required class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" />
+                    <input id="quantity" name="quantity" type="number" min="1" value="1" required class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled} />
                 </div>
                 <div class="flex flex-col gap-2">
                     <label for="expiration_date" class="font-semibold text-slate-700">Date d’expiration</label>
-                    <input id="expiration_date" name="expiration_date" type="date" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" />
+                    <input id="expiration_date" name="expiration_date" type="date" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled} />
                 </div>
                 <div class="flex flex-col gap-2">
                     <label for="category" class="font-semibold text-slate-700">Catégorie</label>
-                    <input id="category" name="category" placeholder="Ex : Produits laitiers" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" />
+                    <input id="category" name="category" placeholder="Ex : Produits laitiers" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled} />
                 </div>
                 <div class="flex flex-col gap-2 md:col-span-2">
                     <label for="notes" class="font-semibold text-slate-700">Notes</label>
-                    <textarea id="notes" name="notes" placeholder="À consommer rapidement ..." class="min-h-[96px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500"></textarea>
+                    <textarea id="notes" name="notes" placeholder="À consommer rapidement ..." class="min-h-[96px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled}></textarea>
                 </div>
                 <div class="md:col-span-2">
-                    <button type="submit" class="inline-flex rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-800">Ajouter au frigo</button>
+                    <button type="submit" class="inline-flex rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-800">{add_button}</button>
                 </div>
             </form>
         </div>
