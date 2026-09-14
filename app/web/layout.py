@@ -125,8 +125,8 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
             onclick="toggleTheme()"
             class="mt-4 flex w-full items-center justify-between rounded-xl bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/15"
         >
-            <span>Mode sombre</span>
-            <span id="theme-toggle-icon" aria-hidden="true">🌙</span>
+            <span id="theme-toggle-text">Mode Clair</span>
+            <span id="theme-toggle-icon" aria-hidden="true">☀️</span>
         </button>
     """
 
@@ -194,9 +194,14 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                 }}
                 function updateThemeIcon() {{
                     var icon = document.getElementById('theme-toggle-icon');
-                    if (icon) {{
-                        icon.textContent = document.documentElement.classList.contains('dark') ? '🌙' : '☀️';
+                    var text = document.getElementById('theme-toggle-text');
+                    if (text) {{
+                        text.textContent = document.documentElement.classList.contains('dark') ? 'Mode Clair' : 'Mode Sombre';
                     }}
+                    if (icon) {{
+                        icon.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+                    }}
+
                 }}
                 document.addEventListener('DOMContentLoaded', updateThemeIcon);
             </script>

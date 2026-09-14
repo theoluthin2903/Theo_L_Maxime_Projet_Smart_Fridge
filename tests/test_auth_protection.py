@@ -83,3 +83,14 @@ def test_auth_dark_theme_has_specific_css_rules():
     assert "html.dark .auth-shell" in css
     assert "html.dark .auth-card--green" in css
     assert "html.dark .auth-card--dark" in css
+
+
+def test_theme_toggle_button_uses_the_correct_text_element():
+    response = client.get("/login")
+    assert response.status_code == 200
+    html = response.text
+
+    assert 'id="theme-toggle-text"' in html
+    assert 'getElementById(\'theme-toggle-text\')' in html
+    assert 'text.textContent' in html
+    
