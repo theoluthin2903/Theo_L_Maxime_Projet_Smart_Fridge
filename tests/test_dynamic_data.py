@@ -85,3 +85,19 @@ def test_french_users_have_separate_fridges():
 
     data.delete_fridge_item(user_one[0]["id"], 1)
     data.delete_fridge_item(user_two[0]["id"], 2)
+
+
+def test_database_migration_is_not_run_automatically(monkeypatch):
+    import importlib
+
+    import app.db.database as db_module
+
+    monkeypatch.delenv("SMARTFRIDGE_RUN_MIGRATIONS", raising=False)
+
+    calls = []
+    monkeypatch.setattr(db_module, "ensure_fridge_user_id_column", lambda: calls.append("fridge"))
+    monkeypatch.setattr(db_module, "ensure_user_profile_columns", lambda: calls.append("profile"))
+
+    importlib.reload(db_module)
+
+    assert calls == []
