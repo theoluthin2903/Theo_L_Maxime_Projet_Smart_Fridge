@@ -2,6 +2,7 @@ import os
 
 import requests
 from dotenv import load_dotenv
+from pydantic import BaseModel
 from sqlalchemy import asc
 
 from app.db.database import SessionLocal
@@ -85,8 +86,43 @@ def delete_fridge_item(item_id: int, user_id: int | None = None):
     return True
 
 
+class IngredientQuantity(BaseModel):
+    ingredient: str
+    quantity: str = ""
+    normalized: str = ""
+
+    @classmethod
+    def from_pair(cls, ingredient: str, quantity: str = ""):
+        cleaned = (ingredient or "").strip()
+        return cls(
+            ingredient=cleaned,
+            quantity=(quantity or "").strip(),
+            normalized=normalize_name(cleaned),
+        )
+
+
 def normalize_name(name: str) -> str:
     return (name or "").strip().lower().replace("-", " ")
+
+
+def flatten_meal_ingredients(meal: dict) -> list[IngredientQuantity]:
+    ingredients: list[IngredientQuantity] = []
+    seen = set()
+
+    for index in range(1, 21):
+        ingredient = (meal.get(f"strIngredient{index}") or "").strip()
+        if not ingredient:
+            continue
+
+        normalized = normalize_name(ingredient)
+        if not normalized or normalized in seen:
+            continue
+
+        quantity = (meal.get(f"strMeasure{index}") or "").strip()
+        ingredients.append(IngredientQuantity.from_pair(ingredient, quantity))
+        seen.add(normalized)
+
+    return ingredients
 
 
 def get_fridge_ingredient_names():
@@ -119,6 +155,26 @@ def _extract_nutrient_value(nutrients, names):
         exact = normalized.get(candidate.strip().lower())
         if exact is not None:
             return exact
+    return 0
+
+
+def _extract_usda_nutrient_value(nutrients, names=None, nutrient_ids=None):
+    names = names or []
+    nutrient_ids = nutrient_ids or []
+    normalized = {
+        (n.get("nutrientName", "") or "").strip().lower().replace("-", " "): n.get("value")
+        for n in nutrients
+        if isinstance(n, dict)
+    }
+    for candidate in names:
+        value = normalized.get(candidate.strip().lower())
+        if value is not None:
+            return value
+
+    for nutrient_id in nutrient_ids:
+        for item in nutrients:
+            if isinstance(item, dict) and int(item.get("nutrientId", -1) or -1) == int(nutrient_id):
+                return item.get("value")
     return 0
 
 
@@ -179,7 +235,7 @@ def get_usda_foods(query: str, limit: int = 3):
                 "https://api.nal.usda.gov/fdc/v1/foods/search",
                 params={
                     "query": term,
-                    "dataType": ["SR Legacy", "Branded"],
+                    "dataType": ["SR Legacy", "Foundation"],
                     "pageSize": max(5, limit),
                     "api_key": USDA_API_KEY,
                 },
@@ -197,22 +253,30 @@ def get_usda_foods(query: str, limit: int = 3):
             candidate = {
                 "name": product_name,
                 "category": _normalize_category(item.get("foodCategory", "Autre")),
-                "calories": item.get("calories", 0),
-                "energie": _extract_nutrient_value(
+                "calories": _extract_usda_nutrient_value(
                     nutrients,
                     ["energy", "energy, total", "energ", "calories"],
+                    [1008],
                 ),
-                "proteines": _extract_nutrient_value(
+                "energie": _extract_usda_nutrient_value(
+                    nutrients,
+                    ["energy", "energy, total", "energ", "calories"],
+                    [1008],
+                ),
+                "proteines": _extract_usda_nutrient_value(
                     nutrients,
                     ["protein", "proteins"],
+                    [1003],
                 ),
-                "glucides": _extract_nutrient_value(
+                "glucides": _extract_usda_nutrient_value(
                     nutrients,
                     ["carbohydrate, by difference", "carbohydrate", "carbohydrates", "total carbohydrate"],
+                    [1005],
                 ),
-                "lipides": _extract_nutrient_value(
+                "lipides": _extract_usda_nutrient_value(
                     nutrients,
                     ["total lipid (fat)", "fat", "lipids", "total fat"],
+                    [1004],
                 ),
             }
             foods.append(candidate)
@@ -437,13 +501,16 @@ def get_themealdb_recipes(ingredient: str, limit: int = 3):
             if not normalized_name or normalized_name in seen:
                 continue
 
-            description = d.get("strInstructions", "Aucune description disponible.")
+            description = (d.get("strInstructions") or "Aucune description disponible.").strip()
+            if not description:
+                description = "Aucune description disponible."
+
             result.append(
                 {
                     "name": recipe_name,
                     "time": _estimate_recipe_time(d),
                     "difficulty": "Facile",
-                    "description": description[:160],
+                    "description": description,
                 }
             )
             seen.add(normalized_name)

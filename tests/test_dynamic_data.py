@@ -17,6 +17,60 @@ def test_missing_api_key_does_not_return_hardcoded_values(monkeypatch):
     assert data.get_usda_foods("milk", limit=3) == []
 
 
+def test_usda_raw_foods_are_filtered_and_uses_nutrient_ids(monkeypatch):
+    import app.web.data as data
+
+    def fake_fetch_json(url, params=None, timeout=15):
+        assert params["dataType"] == ["SR Legacy", "Foundation"]
+        return {
+            "foods": [
+                {
+                    "description": "Eggplant",
+                    "foodCategory": "Vegetables and Vegetable Products",
+                    "foodNutrients": [
+                        {"nutrientId": 1008, "nutrientName": "Energy", "value": 35},
+                        {"nutrientId": 1003, "nutrientName": "Protein", "value": 1.2},
+                        {"nutrientId": 1004, "nutrientName": "Total lipid (fat)", "value": 0.2},
+                        {"nutrientId": 1005, "nutrientName": "Carbohydrate, by difference", "value": 6.6},
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(data, "USDA_API_KEY", "demo-key")
+    monkeypatch.setattr(data, "fetch_json", fake_fetch_json)
+
+    results = data.get_usda_foods("eggplant", limit=1)
+
+    assert results[0]["name"] == "Eggplant"
+    assert results[0]["calories"] == 35
+    assert results[0]["proteines"] == 1.2
+    assert results[0]["glucides"] == 6.6
+    assert results[0]["lipides"] == 0.2
+
+
+def test_themealdb_ingredients_are_flattened_and_normalized():
+    import app.web.data as data
+
+    payload = {
+        "strMeal": "Aubergine Grillée",
+        "strInstructions": "Étape 1. Couper l'aubergine. Étape 2. Griller.",
+        "strIngredient1": "Aubergine",
+        "strMeasure1": "200 g",
+        "strIngredient2": "Huile d'olive",
+        "strMeasure2": "10 ml",
+        "strIngredient3": "",
+        "strMeasure3": "",
+    }
+
+    ingredients = data.flatten_meal_ingredients(payload)
+
+    assert ingredients[0].ingredient == "Aubergine"
+    assert ingredients[0].normalized == "aubergine"
+    assert ingredients[1].ingredient == "Huile d'olive"
+    assert len(ingredients) == 2
+
+
 def test_french_users_have_separate_fridges():
     import app.web.data as data
 
