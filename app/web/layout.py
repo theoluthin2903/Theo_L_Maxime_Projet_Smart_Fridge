@@ -20,6 +20,9 @@ def get_token_from_request(request: Request) -> str | None:
 
 
 def require_auth(request: Request) -> RedirectResponse | None:
+    if request.method.upper() == "GET":
+        return None
+
     token = get_token_from_request(request)
     if not token:
         return RedirectResponse(url="/login", status_code=302)
@@ -130,6 +133,8 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
         </button>
     """
 
+    visitor_class = "" if is_logged_in else "visitor-mode"
+
     return HTMLResponse(
         f"""
         <!DOCTYPE html>
@@ -168,8 +173,23 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                 }}
             </script>
             <link rel="stylesheet" href="/static/styles.css?v=3" />
+            <style>
+                /* Visiteur : les formulaires de modification sont visibles mais inutilisables. */
+                .visitor-mode form[method="post"] input,
+                .visitor-mode form[method="post"] textarea,
+                .visitor-mode form[method="post"] select,
+                .visitor-mode form[method="post"] button,
+                .visitor-mode form[method="POST"] input,
+                .visitor-mode form[method="POST"] textarea,
+                .visitor-mode form[method="POST"] select,
+                .visitor-mode form[method="POST"] button {{
+                    pointer-events: none;
+                    opacity: 0.55;
+                    cursor: not-allowed;
+                }}
+            </style>
         </head>
-        <body class="bg-green-50 text-slate-800 antialiased transition-colors duration-200 dark:bg-slate-900 dark:text-slate-100">
+        <body class="bg-green-50 text-slate-800 antialiased transition-colors duration-200 dark:bg-slate-900 dark:text-slate-100 {visitor_class}">
             <div class="flex min-h-screen flex-col md:flex-row">
                 <aside class="w-full bg-gradient-to-b from-green-800 to-green-600 p-6 text-white transition-colors duration-200 dark:from-slate-800 dark:to-slate-950 md:w-64">
                     <div class="mb-8 text-2xl font-black">Smart Fridge</div>
