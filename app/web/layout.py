@@ -56,7 +56,7 @@ def register_auth_middleware(app: FastAPI) -> None:
         return await call_next(request)
 
 
-def nav(active: str) -> str:
+def nav(active: str, is_admin: bool = False) -> str:
     links = [
         ("/", "Accueil"),
         ("/fridge", "Frigo"),
@@ -66,6 +66,8 @@ def nav(active: str) -> str:
         ("/alerts", "Alertes"),
         ("/profile", "Profile"),
     ]
+    if is_admin:
+        links.append(("/admin", "Administration"))
     html = []
     for path, label in links:
         is_active = path == active
@@ -99,10 +101,27 @@ def get_user_email_from_request(request: Request) -> str | None:
     return None
 
 
+def is_admin_from_request(request: Request) -> bool:
+    token = get_token_from_request(request)
+    if not token:
+        return False
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            return False
+        with SessionLocal() as db:
+            user = db.query(UserDB).filter(UserDB.id == int(user_id)).first()
+            return bool(user and user.is_admin)
+    except (JWTError, ValueError, TypeError):
+        return False
+
+
 def render_page(title: str, active: str, body: str, request: Request | None = None) -> HTMLResponse:
     if request is not None:
         user_email = get_user_email_from_request(request)
         is_logged_in = bool(user_email)
+        is_admin = is_admin_from_request(request)
         welcome_block = f"""
             <div class="mt-6 rounded-xl border border-white/15 bg-white/5 p-3 text-sm text-white/90">
                 <div class="text-xs uppercase tracking-[0.14em] text-white/60">Bienvenue</div>
@@ -111,6 +130,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
         """ if is_logged_in else ""
     else:
         is_logged_in = False
+        is_admin = False
         welcome_block = ""
 
     logout_button = """
@@ -128,8 +148,8 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
             onclick="toggleTheme()"
             class="mt-4 flex w-full items-center justify-between rounded-xl bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/15"
         >
-            <span id="theme-toggle-text">Mode Clair</span>
-            <span id="theme-toggle-icon" aria-hidden="true">☀️</span>
+            <span>Mode sombre</span>
+            <span id="theme-toggle-icon" aria-hidden="true">🌙</span>
         </button>
     """
 
@@ -194,7 +214,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                 <aside class="w-full bg-gradient-to-b from-green-800 to-green-600 p-6 text-white transition-colors duration-200 dark:from-slate-800 dark:to-slate-950 md:w-64">
                     <div class="mb-8 text-2xl font-black">Smart Fridge</div>
                     <nav class="flex flex-col gap-3">
-                        {nav(active)}
+                        {nav(active, is_admin)}
                     </nav>
                     {theme_toggle_button}
                     {welcome_block}
@@ -214,14 +234,9 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                 }}
                 function updateThemeIcon() {{
                     var icon = document.getElementById('theme-toggle-icon');
-                    var text = document.getElementById('theme-toggle-text');
-                    if (text) {{
-                        text.textContent = document.documentElement.classList.contains('dark') ? 'Mode Clair' : 'Mode Sombre';
-                    }}
                     if (icon) {{
-                        icon.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+                        icon.textContent = document.documentElement.classList.contains('dark') ? '🌙' : '☀️';
                     }}
-
                 }}
                 document.addEventListener('DOMContentLoaded', updateThemeIcon);
             </script>

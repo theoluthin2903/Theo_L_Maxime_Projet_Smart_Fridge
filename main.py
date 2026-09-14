@@ -5,6 +5,7 @@ from app.db import models  # noqa: F401
 from app.db.database import Base, engine
 from app.routers.auth import router as auth_router
 from app.routers.profile import router as profile_router
+from app.web.pages.admin import router as admin_pages_router
 from app.web.data import fridge_items, get_themealdb_recipes, get_usda_foods
 from app.web.layout import register_auth_middleware
 from app.web.pages.alerts import router as alerts_pages_router
@@ -15,9 +16,7 @@ from app.web.pages.nutrition import router as nutrition_pages_router
 from app.web.pages.products import router as products_pages_router
 from app.web.pages.profile import router as profile_pages_router
 
-# No automatic DB mutation on startup.
-# If you really need one-off schema creation/migration, set
-# SMARTFRIDGE_RUN_MIGRATIONS=1 before launching the app.
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Smart Fridge & Nutrition Coach")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -30,6 +29,7 @@ app.include_router(products_pages_router)
 app.include_router(nutrition_pages_router)
 app.include_router(alerts_pages_router)
 app.include_router(profile_pages_router)
+app.include_router(admin_pages_router)
 register_auth_middleware(app)
 
 

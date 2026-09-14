@@ -38,6 +38,7 @@ def ensure_user_profile_columns():
             "sex": "VARCHAR",
             "activity": "VARCHAR",
             "goal": "VARCHAR",
+            "is_admin": "INTEGER NOT NULL DEFAULT 0",
         }
         for name, col_type in new_columns.items():
             if name not in columns:
@@ -52,18 +53,5 @@ def get_db():
         db.close()
 
 
-def run_startup_checks() -> None:
-    """Run schema compatibility checks only when explicitly requested.
-
-    The app should not mutate the SQLite database on import/startup. This is
-    especially important for persistent local development DBs where sample rows
-    or altered columns can be silently rewritten each launch.
-    """
-    if os.getenv("SMARTFRIDGE_RUN_MIGRATIONS", "").strip().lower() not in {"1", "true", "yes", "on"}:
-        return
-
-    ensure_fridge_user_id_column()
-    ensure_user_profile_columns()
-
-
-import os
+ensure_fridge_user_id_column()
+ensure_user_profile_columns()

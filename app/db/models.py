@@ -14,6 +14,7 @@ class UserDB(Base):
     sex = Column(String, nullable=True)
     activity = Column(String, nullable=True)
     goal = Column(String, nullable=True)
+    is_admin = Column(Integer, nullable=False, default=0)
 
 
 class FridgeItemDB(Base):
