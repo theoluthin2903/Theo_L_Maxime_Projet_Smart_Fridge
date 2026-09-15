@@ -90,12 +90,13 @@ def get_user_email_from_request(request: Request) -> str | None:
         user_id = payload.get("sub")
         if not user_id:
             return None
+        user_id = int(user_id)
 
         with SessionLocal() as db:
             user = db.query(UserDB).filter(UserDB.id == user_id).first()
             if user:
                 return user.email
-    except JWTError:
+    except (JWTError, ValueError, TypeError):
         return None
 
     return None
