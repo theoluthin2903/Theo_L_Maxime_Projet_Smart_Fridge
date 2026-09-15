@@ -143,11 +143,10 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
     """ if is_logged_in else ""
 
     login_button = """
-        <a href="/login" class="mt-4 block w-full rounded-xl bg-white px-4 py-3 text-center font-bold text-green-800 shadow-sm transition hover:bg-green-50 dark:text-slate-900">
-            Se connecter
-        </a>
-    """ if not is_logged_in else ""
-
+    <a href="/login" class="mt-4 block w-full rounded-xl bg-white px-4 py-3 text-center font-bold text-green-800 shadow-sm transition hover:bg-green-50 dark:bg-green-600 dark:text-white dark:hover:bg-green-700">
+        Se connecter
+    </a>
+""" if not is_logged_in else ""
     theme_toggle_button = """
         <button
             type="button"
