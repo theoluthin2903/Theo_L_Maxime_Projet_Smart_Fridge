@@ -29,7 +29,8 @@ def get_user_id_from_cookie(request: Request):
         from jose import jwt
         from app.core.jwt import SECRET_KEY, ALGORITHM
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub")
+        user_id = payload.get("sub")
+        return int(user_id) if user_id is not None else None
     except Exception:
         return None
 
