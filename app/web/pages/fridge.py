@@ -1,5 +1,11 @@
+from datetime import date, datetime, timedelta
+from html import escape
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
+
+from app.db.database import SessionLocal
+from app.db.models import AdminLogDB, UserDB
 
 from app.web.data import (
     add_fridge_item,
@@ -70,9 +76,62 @@ def fridge_page(request: Request):
     form_disabled = "" if is_logged_in else "disabled"
     add_button = "Ajouter au frigo" if is_logged_in else "Ajouter au Frigo"
     product_options = get_available_products(limit=200)
+
+    # Menus déroulants du formulaire
     options_html = "".join(
-        f'<option value="{product["name"]}" data-category="{product["category"]}">{product["name"]}</option>'
+        f'<option value="{escape(product["name"], quote=True)}" '
+        f'data-category="{escape(product["category"], quote=True)}">'
+        f'{escape(product["name"])}</option>'
         for product in product_options
+    )
+
+    categories = sorted(
+        {
+            (product.get("category") or "Autre").strip()
+            for product in product_options
+            if (product.get("category") or "").strip()
+        },
+        key=str.lower,
+    )
+    category_options_html = "".join(
+        f'<option value="{escape(category, quote=True)}">{escape(category)}</option>'
+        for category in categories
+    )
+
+    quantity_options_html = "".join(
+        f'<option value="{quantity}"{" selected" if quantity == 1 else ""}>{quantity}</option>'
+        for quantity in range(1, 21)
+    )
+
+    today = date.today()
+    expiration_options = [("", "Pas de date d’expiration")]
+    for offset in range(0, 91):
+        expiration_day = today + timedelta(days=offset)
+        if offset == 0:
+            label = f"Aujourd’hui — {expiration_day.strftime('%d/%m/%Y')}"
+        elif offset == 1:
+            label = f"Demain — {expiration_day.strftime('%d/%m/%Y')}"
+        else:
+            label = expiration_day.strftime("%d/%m/%Y")
+        expiration_options.append((expiration_day.isoformat(), label))
+
+    expiration_options_html = "".join(
+        f'<option value="{value}">{label}</option>'
+        for value, label in expiration_options
+    )
+
+    note_options = [
+        ("", "Aucune note"),
+        ("À consommer rapidement", "À consommer rapidement"),
+        ("Produit ouvert", "Produit ouvert"),
+        ("À congeler", "À congeler"),
+        ("Décongelé", "Décongelé"),
+        ("Prévu pour une recette", "Prévu pour une recette"),
+        ("À partager", "À partager"),
+    ]
+    note_options_html = "".join(
+        f'<option value="{escape(value, quote=True)}">{escape(label)}</option>'
+        for value, label in note_options
     )
 
     body = f"""
@@ -81,70 +140,85 @@ def fridge_page(request: Request):
             <h1 class="mb-5 text-3xl font-bold text-slate-800">Mon frigo</h1>
             <form method="post" action="/fridge" class="grid gap-4 md:grid-cols-2">
                 <div class="flex flex-col gap-2 md:col-span-2">
-                    <label for="product-search" class="font-semibold text-slate-700">Produit</label>
-                    <input id="product-search" type="search" placeholder="Rechercher un produit..." class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled} />
-                    <select id="name" name="name" required class="mt-2 min-h-[150px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none ring-0 focus:border-green-500" size="10" {form_disabled}>
+                    <label for="name" class="font-semibold text-slate-700">Produit</label>
+                    <select id="name" name="name" required
+                        class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500"
+                        {form_disabled}>
                         <option value="">Choisir un produit</option>
                         {options_html}
                     </select>
                 </div>
+
                 <div class="flex flex-col gap-2">
                     <label for="quantity" class="font-semibold text-slate-700">Quantité</label>
-                    <input id="quantity" name="quantity" type="number" min="1" value="1" required class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled} />
+                    <select id="quantity" name="quantity" required
+                        class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500"
+                        {form_disabled}>
+                        {quantity_options_html}
+                    </select>
                 </div>
+
                 <div class="flex flex-col gap-2">
                     <label for="expiration_date" class="font-semibold text-slate-700">Date d’expiration</label>
-                    <input id="expiration_date" name="expiration_date" type="date" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled} />
+                    <select id="expiration_date" name="expiration_date"
+                        class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500"
+                        {form_disabled}>
+                        {expiration_options_html}
+                    </select>
                 </div>
+
                 <div class="flex flex-col gap-2">
                     <label for="category" class="font-semibold text-slate-700">Catégorie</label>
-                    <input id="category" name="category" placeholder="Ex : Produits laitiers" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled} />
+                    <select id="category" name="category"
+                        class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500"
+                        {form_disabled}>
+                        <option value="">Choisir une catégorie</option>
+                        {category_options_html}
+                    </select>
                 </div>
-                <div class="flex flex-col gap-2 md:col-span-2">
-                    <label for="notes" class="font-semibold text-slate-700">Notes</label>
-                    <textarea id="notes" name="notes" placeholder="À consommer rapidement ..." class="min-h-[96px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500" {form_disabled}></textarea>
+
+                <div class="flex flex-col gap-2">
+                    <label for="notes" class="font-semibold text-slate-700">Note</label>
+                    <select id="notes" name="notes"
+                        class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-green-500"
+                        {form_disabled}>
+                        {note_options_html}
+                    </select>
                 </div>
+
                 <div class="md:col-span-2">
-                    <button type="submit" class="inline-flex rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-800">{add_button}</button>
+                    <button type="submit"
+                        class="inline-flex rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-800">
+                        {add_button}
+                    </button>
                 </div>
             </form>
         </div>
+
         <script>
-            const productSearch = document.getElementById('product-search');
             const productSelect = document.getElementById('name');
-            const categoryInput = document.getElementById('category');
-            if (productSearch && productSelect && categoryInput) {{
+            const categorySelect = document.getElementById('category');
+
+            if (productSelect && categorySelect) {{
                 const syncCategory = () => {{
-                    const selected = productSelect.selectedOptions[0] || productSelect.options[productSelect.selectedIndex];
-                    const category = selected && selected.getAttribute('data-category') ? selected.getAttribute('data-category') : '';
-                    categoryInput.value = category;
-                }};
-                const filterOptions = () => {{
-                    const term = productSearch.value.trim().toLowerCase();
-                    Array.from(productSelect.options).forEach((option) => {{
-                        if (!option.value) {{
-                            option.hidden = false;
-                            return;
+                    const selected = productSelect.options[productSelect.selectedIndex];
+                    const category = selected ? selected.getAttribute('data-category') : '';
+
+                    if (category) {{
+                        const matchingOption = Array.from(categorySelect.options).find(
+                            (option) => option.value === category
+                        );
+
+                        if (matchingOption) {{
+                            categorySelect.value = category;
                         }}
-                        const optionText = option.text.toLowerCase();
-                        option.hidden = term !== '' && !optionText.includes(term);
-                    }});
-                    const visible = Array.from(productSelect.options).filter((option) => !option.hidden && option.value);
-                    if (visible.length > 0) {{
-                        productSelect.value = visible[0].value;
-                        syncCategory();
-                    }} else {{
-                        categoryInput.value = '';
                     }}
                 }};
+
                 productSelect.addEventListener('change', syncCategory);
-                productSelect.addEventListener('input', syncCategory);
-                productSelect.addEventListener('click', syncCategory);
-                productSelect.addEventListener('keyup', syncCategory);
-                productSearch.addEventListener('input', filterOptions);
-                filterOptions();
             }}
         </script>
+
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h2 class="mb-4 text-2xl font-bold text-slate-800">Contenu actuel</h2>
             <ul class="space-y-3">{items_html}</ul>
@@ -183,7 +257,30 @@ def add_to_fridge(
         return render_page("Mon frigo", "/fridge", body, request)
 
     if user_id is not None:
-        add_fridge_item(name, quantity, int(user_id), expiration_date, category, notes)
+        user_id_int = int(user_id)
+        add_fridge_item(name, quantity, user_id_int, expiration_date, category, notes)
+
+        # Log de l'ajout : on garde l'utilisateur réel qui a effectué l'action.
+        with SessionLocal() as db:
+            user = db.query(UserDB).filter(UserDB.id == user_id_int).first()
+
+            details = f"{name.strip()} • quantité : {quantity}"
+            if category.strip():
+                details += f" • {category.strip()}"
+            if expiration_date.strip():
+                details += f" • expiration : {expiration_date.strip()}"
+            if notes.strip():
+                details += f" • note : {notes.strip()}"
+
+            db.add(AdminLogDB(
+                admin_user_id=user_id_int,
+                action="Produit ajouté au frigo",
+                target=name.strip(),
+                details=details,
+                created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ))
+            db.commit()
+
     return fridge_page(request)
 
 

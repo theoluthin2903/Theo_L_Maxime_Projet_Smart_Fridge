@@ -140,7 +140,7 @@ def admin_dashboard(request: Request):
         recent_logs = logs[:15]
         log_rows = []
         for log in recent_logs:
-            actor = "Système" if log.admin_user_id == 0 else escape(user_by_id.get(log.admin_user_id, f"Admin #{log.admin_user_id}"))
+            actor = "Système" if log.admin_user_id == 0 else escape(user_by_id.get(log.admin_user_id, f"Utilisateur #{log.admin_user_id}"))
             log_rows.append(f'''<div class="admin-log"><div class="admin-log-icon">📝</div><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><strong>{escape(log.action)}</strong><span class="text-xs text-slate-400">{escape(log.created_at)}</span></div><div class="text-sm text-slate-500 dark:text-slate-300">{escape(log.details or '')}</div><div class="text-xs text-slate-400">Par : {actor}</div></div></div>''')
 
         alerts = []

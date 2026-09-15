@@ -36,7 +36,8 @@ class AdminLogDB(Base):
     __tablename__ = "admin_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    # 0 = système / action automatique (ex. création d'un compte utilisateur).
+    # ID de l'utilisateur/admin à l'origine de l'action.
+    # Les anciens logs peuvent encore contenir 0.
     admin_user_id = Column(Integer, nullable=False, index=True)
     action = Column(String, nullable=False)
     target = Column(String, nullable=True)
@@ -50,7 +51,9 @@ class AdminLogDB(Base):
 def log_user_creation(mapper, connection, target):
     connection.execute(
         AdminLogDB.__table__.insert().values(
-            admin_user_id=0,
+            # Pour une inscription classique, le compte créé est lui-même
+            # l'acteur de l'événement. Cela évite d'afficher « Système ».
+            admin_user_id=target.id,
             action="Compte créé",
             target=f"#{target.id}",
             details=(target.email or "") + (" • administrateur" if target.is_admin else ""),
