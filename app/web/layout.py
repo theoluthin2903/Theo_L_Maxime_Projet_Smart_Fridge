@@ -90,12 +90,13 @@ def get_user_email_from_request(request: Request) -> str | None:
         user_id = payload.get("sub")
         if not user_id:
             return None
+        user_id = int(user_id)
 
         with SessionLocal() as db:
             user = db.query(UserDB).filter(UserDB.id == user_id).first()
             if user:
                 return user.email
-    except JWTError:
+    except (JWTError, ValueError, TypeError):
         return None
 
     return None
@@ -140,6 +141,12 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
             </button>
         </form>
     """ if is_logged_in else ""
+
+    login_button = """
+        <a href="/login" class="mt-4 block w-full rounded-xl bg-white px-4 py-3 text-center font-bold text-green-800 shadow-sm transition hover:bg-green-50 dark:text-slate-900">
+            Se connecter
+        </a>
+    """ if not is_logged_in else ""
 
     theme_toggle_button = """
         <button
@@ -218,6 +225,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                     </nav>
                     {theme_toggle_button}
                     {welcome_block}
+                    {login_button}
                     {logout_button}
                 </aside>
                 <main class="flex-1 p-6 md:p-8">
