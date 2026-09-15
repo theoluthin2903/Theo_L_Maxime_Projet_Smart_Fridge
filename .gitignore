@@ -219,4 +219,4 @@ __marimo__/
 
 
 #DATABASE
-.db
+*.db
