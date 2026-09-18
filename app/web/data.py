@@ -321,7 +321,7 @@ def _estimate_recipe_time(recipe: dict):
     return "45 min"
 
 
-def get_usda_foods(query: str, limit: int = 3):
+def get_usda_foods(query: str, limit: int = None):
     if not query:
         return []
 
@@ -394,7 +394,7 @@ def get_usda_foods(query: str, limit: int = 3):
 
 
 
-def get_available_products(query: str = "", limit: int = 200):
+def get_available_products(query: str = "", limit: int = None):
     """Retourne les produits réellement renvoyés par les APIs, sans données codées en dur."""
     products: list[dict] = []
     seen: set[str] = set()
@@ -426,7 +426,7 @@ def get_available_products(query: str = "", limit: int = 200):
         if not term:
             continue
 
-        for item in get_usda_foods(term, limit=12):
+        for item in get_usda_foods(term, limit):
             add_product(item.get("name", ""), item.get("category", "Autre"))
 
     try:
@@ -452,7 +452,7 @@ def get_available_products(query: str = "", limit: int = 200):
     return sorted(products, key=lambda item: item["name"].lower())[:limit]
 
 
-def get_available_product_names(query: str = "", limit: int = 200):
+def get_available_product_names(query: str = "", limit: int = None):
     products = get_available_products(query=query, limit=limit)
     return [product["name"] for product in products]
 

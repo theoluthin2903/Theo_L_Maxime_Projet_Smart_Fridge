@@ -76,7 +76,7 @@ def fridge_page(request: Request):
     """
     form_disabled = "" if is_logged_in else "disabled"
     add_button = "Ajouter au frigo" if is_logged_in else "Ajouter au Frigo"
-    product_options = get_available_products(limit=200)
+    product_options = get_available_products(limit=None)
 
     # Menus déroulants du formulaire
     options_html = "".join(
