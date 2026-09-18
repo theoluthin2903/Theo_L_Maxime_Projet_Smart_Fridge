@@ -112,8 +112,6 @@ Le projet peut fonctionner avec SQLite (par défaut) ou avec une base PostgreSQL
 
 Le cahier des charges complet est disponible dans le fichier [`Project Brief Smart Fridge & Nutrition Coach.pdf`](./Project%20Brief%20Smart%20Fridge%20%26%20Nutrition%20Coach%20(1).pdf).
 
-Pour plus de détails sur le panneau d'administration, voir [`README_ADMIN.md`](./README_ADMIN.md).
-
 ## 👥 Auteurs
 
 - Théo LUTHIN
