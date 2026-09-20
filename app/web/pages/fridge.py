@@ -106,7 +106,7 @@ def fridge_page(request: Request):
 
     today = date.today()
     expiration_options = [("", "Pas de date d’expiration")]
-    for offset in range(0, 91):
+    for offset in range(0, 365):
         expiration_day = today + timedelta(days=offset)
         if offset == 0:
             label = f"Aujourd’hui — {expiration_day.strftime('%d/%m/%Y')}"
@@ -308,7 +308,7 @@ def products_page(request: Request):
     if "q" in request.query_params:
         query = request.query_params.get("q", "").strip()
 
-    products_data = get_usda_foods(query, limit=3) if query else []
+    products_data = get_usda_foods(query, limit = None) if query else []
     items_html = "".join(
         f"""
         <li class="rounded-xl border border-green-100 bg-green-50 p-4">
