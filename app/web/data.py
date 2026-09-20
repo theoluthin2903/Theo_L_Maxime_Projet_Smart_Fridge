@@ -481,60 +481,100 @@ def get_food_nutrition(query: str):
         "lipides": 0,
     }
 
-def get_themealdb_recipes(ingredient: str, limit: int = 3):
+def _shorten(text: str, max_len: int = 180) -> str:
+    text = " ".join((text or "").split())
+    if len(text) <= max_len:
+        return text
+    return text[:max_len].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
+
+
+def get_themealdb_recipes(ingredient: str, limit: int = 12):
+    """Retourne des recettes TheMealDB pour les produits du frigo.
+
+    - On interroge l'API pour CHAQUE produit (l'API gratuite ne gère pas
+      plusieurs ingrédients d'un coup).
+    - Les recettes qui utilisent plusieurs produits du frigo passent en premier.
+    - Ensuite on alterne entre les produits (round-robin) pour que le premier
+      produit ne prenne pas toute la place.
+    """
     if not ingredient:
         return []
 
-    ingredient_terms = [term.strip() for term in ingredient.replace(";", ",").split(",") if term.strip()]
-    if not ingredient_terms:
+    terms = []
+    for term in ingredient.replace(";", ",").split(","):
+        term = term.strip()
+        if term and normalize_name(term) not in [normalize_name(t) for t in terms]:
+            terms.append(term)
+    if not terms:
         return []
 
-    result = []
-    seen = set()
+    per_term: dict[str, list[dict]] = {}
+    matched_by_meal: dict[str, list[str]] = {}
+    meal_info: dict[str, dict] = {}
 
-    for term in ingredient_terms:
+    for term in terms:
         try:
             filtered = fetch_json(
                 "https://www.themealdb.com/api/json/v1/1/filter.php",
-                params={"i": term},
+                params={"i": term.replace(" ", "_")},
             )
         except Exception:
             continue
 
-        meals = filtered.get("meals") or []
-        for meal in meals[:limit]:
-            meal_id = meal.get("idMeal")
-            if not meal_id:
-                continue
-            try:
-                detail = fetch_json(
-                    "https://www.themealdb.com/api/json/v1/1/lookup.php",
-                    params={"i": meal_id},
-                )
-            except Exception:
-                continue
+        meals = [m for m in (filtered.get("meals") or []) if m.get("idMeal")]
+        per_term[term] = meals
+        for meal in meals:
+            meal_id = meal["idMeal"]
+            meal_info.setdefault(meal_id, meal)
+            matched_by_meal.setdefault(meal_id, []).append(term)
 
-            d = (detail.get("meals") or [{}])[0]
-            recipe_name = d.get("strMeal", meal.get("strMeal", "Recette"))
-            normalized_name = normalize_name(recipe_name)
-            if not normalized_name or normalized_name in seen:
-                continue
+    # 1) recettes qui utilisent plusieurs produits du frigo (les plus complètes d'abord)
+    ordered = sorted(
+        (mid for mid, matched in matched_by_meal.items() if len(matched) > 1),
+        key=lambda mid: -len(matched_by_meal[mid]),
+    )
 
-            description = (d.get("strInstructions") or "Aucune description disponible.").strip()
-            if not description:
-                description = "Aucune description disponible."
+    # 2) puis alternance entre les produits pour équilibrer les résultats
+    max_len = max((len(m) for m in per_term.values()), default=0)
+    for index in range(max_len):
+        for term in terms:
+            meals = per_term.get(term, [])
+            if index < len(meals) and meals[index]["idMeal"] not in ordered:
+                ordered.append(meals[index]["idMeal"])
 
-            result.append(
-                {
-                    "name": recipe_name,
-                    "time": _estimate_recipe_time(d),
-                    "difficulty": "Facile",
-                    "description": description,
-                }
+    result = []
+    seen = set()
+
+    for meal_id in ordered:
+        if len(result) >= limit:
+            break
+        try:
+            detail = fetch_json(
+                "https://www.themealdb.com/api/json/v1/1/lookup.php",
+                params={"i": meal_id},
             )
-            seen.add(normalized_name)
-            if len(result) >= limit:
-                return result
+        except Exception:
+            continue
+
+        d = (detail.get("meals") or [{}])[0]
+        recipe_name = d.get("strMeal", meal_info[meal_id].get("strMeal", "Recette"))
+        normalized_name = normalize_name(recipe_name)
+        if not normalized_name or normalized_name in seen:
+            continue
+
+        instructions = (d.get("strInstructions") or "").strip()
+        result.append(
+            {
+                "name": recipe_name,
+                "time": _estimate_recipe_time(d),
+                "difficulty": "Facile",
+                "description": _shorten(instructions) or "Aucune description disponible.",
+                "instructions": instructions,
+                "image": d.get("strMealThumb") or meal_info[meal_id].get("strMealThumb") or "",
+                "matched": matched_by_meal.get(meal_id, []),
+            }
+        )
+        seen.add(normalized_name)
 
     return result
 
