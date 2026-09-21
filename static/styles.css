@@ -809,6 +809,8 @@ html.dark .admin-quick-actions button:hover{background:#132e1d;border-color:#166
 .recipe-card__meta:empty{display:none}
 .recipe-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:.78rem;font-weight:600}
 .recipe-tag--fridge{background:#dcfce7;color:#166534}
+.recipe-card__desc{margin:0;font-size:.9rem;line-height:1.55;color:#475569;display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.recipe-card__details{font-size:.88rem;color:#475569}
 .recipe-card__details summary{cursor:pointer;font-weight:700;color:#15803d;list-style:none}
 .recipe-card__details summary::-webkit-details-marker{display:none}
 .recipe-card__details summary::after{content:" ▾"}
@@ -817,8 +819,22 @@ html.dark .admin-quick-actions button:hover{background:#132e1d;border-color:#166
 html.dark .recipe-card{background:#1e293b;border-color:#334155;box-shadow:none}
 html.dark .recipe-card:hover{box-shadow:0 10px 24px rgba(0,0,0,.35)}
 html.dark .recipe-card__title{color:#f1f5f9}
-html.dark .recipe-card__details{color:#cbd5e1}
+html.dark .recipe-card__desc,html.dark .recipe-card__details{color:#cbd5e1}
 html.dark .recipe-tag{background:#334155;color:#cbd5e1}
 html.dark .recipe-tag--fridge{background:rgba(34,197,94,.18);color:#86efac}
 html.dark .recipe-card__details summary{color:#4ade80}
 @media(max-width:650px){.recipe-grid{grid-template-columns:1fr}}
+
+/* ===== Cartes produits du frigo (réutilise .recipe-grid / .recipe-card) ===== */
+.fridge-card__top{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f0fdf4,#dcfce7)}
+.fridge-card__emoji{font-size:2.2rem;line-height:1}
+.fridge-card__qty{padding:4px 12px;border-radius:999px;background:#fff;color:#166534;font-weight:800;font-size:.9rem;box-shadow:0 1px 3px rgba(22,101,52,.15)}
+.fridge-card__notes{margin:0;font-size:.85rem;color:#475569}
+.fridge-card__delete{margin-top:4px}
+.recipe-tag--warn{background:#fef3c7;color:#92400e}
+.recipe-tag--danger{background:#fee2e2;color:#b91c1c}
+html.dark .fridge-card__top{background:linear-gradient(135deg,rgba(34,197,94,.14),rgba(34,197,94,.05))}
+html.dark .fridge-card__qty{background:#0f172a;color:#86efac;box-shadow:none}
+html.dark .fridge-card__notes{color:#cbd5e1}
+html.dark .recipe-tag--warn{background:rgba(245,158,11,.18);color:#fcd34d}
+html.dark .recipe-tag--danger{background:rgba(239,68,68,.18);color:#fca5a5}
