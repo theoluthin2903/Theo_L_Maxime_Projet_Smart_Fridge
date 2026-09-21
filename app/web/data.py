@@ -489,6 +489,71 @@ def _shorten(text: str, max_len: int = 180) -> str:
 
 
 def get_themealdb_recipes(ingredient: str, limit: int | None = None):
+def _estimate_recipe_difficulty(recipe: dict) -> str:
+    """Estime la difficulté à partir des ingrédients et de la préparation."""
+    instructions = (recipe.get("strInstructions") or "").lower()
+    ingredient_count = len(flatten_meal_ingredients(recipe))
+    score = 0
+
+    if ingredient_count >= 8:
+        score += 1
+    if ingredient_count >= 13:
+        score += 1
+    if len(instructions) >= 700:
+        score += 1
+    if len(instructions) >= 1400:
+        score += 1
+
+    advanced_terms = (
+        "marinate", "knead", "proof", "reduce", "caramel", "deep fry",
+        "bain-marie", "temper", "fillet", "debone", "stuff", "roast",
+    )
+    score += min(2, sum(term in instructions for term in advanced_terms))
+
+    if score >= 4:
+        return "Difficile"
+    if score >= 2:
+        return "Moyenne"
+    return "Facile"
+
+
+def _recipe_description_fr(recipe: dict) -> str:
+    """Crée une courte description en français à partir des métadonnées TheMealDB."""
+    category_map = {
+        "beef": "bœuf", "chicken": "poulet", "dessert": "dessert",
+        "lamb": "agneau", "miscellaneous": "plat varié", "pasta": "pâtes",
+        "pork": "porc", "seafood": "fruits de mer", "side": "accompagnement",
+        "starter": "entrée", "vegan": "plat végétalien",
+        "vegetarian": "plat végétarien", "breakfast": "petit-déjeuner",
+        "goat": "chèvre",
+    }
+    area_map = {
+        "american": "américaine", "british": "britannique", "canadian": "canadienne",
+        "chinese": "chinoise", "croatian": "croate", "dutch": "néerlandaise",
+        "egyptian": "égyptienne", "filipino": "philippine", "french": "française",
+        "greek": "grecque", "indian": "indienne", "irish": "irlandaise",
+        "italian": "italienne", "jamaican": "jamaïcaine", "japanese": "japonaise",
+        "kenyan": "kényane", "malaysian": "malaisienne", "mexican": "mexicaine",
+        "moroccan": "marocaine", "polish": "polonaise", "portuguese": "portugaise",
+        "russian": "russe", "spanish": "espagnole", "thai": "thaïlandaise",
+        "tunisian": "tunisienne", "turkish": "turque", "vietnamese": "vietnamienne",
+    }
+    category_raw = (recipe.get("strCategory") or "").strip().lower()
+    area_raw = (recipe.get("strArea") or "").strip().lower()
+    category = category_map.get(category_raw, "plat savoureux")
+    area = area_map.get(area_raw)
+    ingredient_count = len(flatten_meal_ingredients(recipe))
+
+    if area:
+        text = f"Découvrez ce {category} inspiré de la cuisine {area}, simple à préparer à la maison"
+    else:
+        text = f"Découvrez ce {category}, une recette savoureuse à préparer à la maison"
+    if ingredient_count:
+        text += f" avec {ingredient_count} ingrédients principaux"
+    return text + "."
+
+
+def get_themealdb_recipes(ingredient: str, limit: int = 12):
     """Retourne des recettes TheMealDB pour les produits du frigo.
 
     - On interroge l'API pour CHAQUE produit (l'API gratuite ne gère pas
@@ -567,8 +632,8 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
             {
                 "name": recipe_name,
                 "time": _estimate_recipe_time(d),
-                "difficulty": "Facile",
-                "description": _shorten(instructions) or "Aucune description disponible.",
+                "difficulty": _estimate_recipe_difficulty(d),
+                "description": _recipe_description_fr(d),
                 "instructions": instructions,
                 "image": d.get("strMealThumb") or meal_info[meal_id].get("strMealThumb") or "",
                 "matched": matched_by_meal.get(meal_id, []),

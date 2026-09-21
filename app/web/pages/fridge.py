@@ -375,6 +375,7 @@ def recipes_page(request: Request):
                     <span class="recipe-tag">👍 {escape(recipe['difficulty'])}</span>
                 </div>
                 <div class="recipe-card__meta">{tags}</div>
+                <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{escape(recipe.get('description') or '')}</p>
                 {details}
             </div>
         </article>
