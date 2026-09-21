@@ -347,7 +347,7 @@ def recipes_page(request: Request):
         return redirect
 
     ingredient = get_fridge_search_query()
-    recipe_data = get_themealdb_recipes(ingredient, limit=12) if ingredient else []
+    recipe_data = get_themealdb_recipes(ingredient, limit = None) if ingredient else []
 
     def recipe_card(recipe):
         image = (

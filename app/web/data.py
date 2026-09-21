@@ -488,7 +488,7 @@ def _shorten(text: str, max_len: int = 180) -> str:
     return text[:max_len].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
 
 
-def get_themealdb_recipes(ingredient: str, limit: int = 12):
+def get_themealdb_recipes(ingredient: str, limit: int | None = None):
     """Retourne des recettes TheMealDB pour les produits du frigo.
 
     - On interroge l'API pour CHAQUE produit (l'API gratuite ne gère pas
@@ -546,7 +546,7 @@ def get_themealdb_recipes(ingredient: str, limit: int = 12):
     seen = set()
 
     for meal_id in ordered:
-        if len(result) >= limit:
+        if limit is not None and len(result) >= limit:
             break
         try:
             detail = fetch_json(
