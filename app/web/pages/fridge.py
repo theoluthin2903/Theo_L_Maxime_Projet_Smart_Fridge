@@ -384,10 +384,26 @@ def products_page(request: Request):
 
 @router.get("/recipes", response_class=HTMLResponse)
 def recipes_page(request: Request):
-    redirect = require_auth(request)
-    if redirect:
-        return redirect
+    # Les GET sont volontairement accessibles aux visiteurs dans ce projet.
+    # On contrôle donc explicitement la connexion ici : un visiteur ne doit
+    # jamais réutiliser le contenu du frigo global du dernier utilisateur.
+    user_id = get_user_id_from_cookie(request)
+    if user_id is None:
+        body = """
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-3 text-3xl font-bold text-slate-800">Recettes</h1>
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-5">
+                <p class="font-semibold text-amber-800">Connectez-vous pour voir vos recettes</p>
+                <p class="mt-1 text-sm text-amber-700">Les recettes sont proposées à partir des produits présents dans votre frigo.</p>
+                <a href="/login" class="mt-3 inline-flex rounded-lg bg-pink-500 px-4 py-2 text-sm font-semibold text-white hover:bg-pink-600">Se connecter</a>
+            </div>
+        </div>
+        """
+        return render_page("Recettes", "/recipes", body, request)
 
+    # Une seule requête Supabase suffit pour reconstruire le contexte du frigo.
+    # Cela rend aussi l'accès direct /recipes fiable après connexion/refresh.
+    load_fridge_items(int(user_id))
     ingredient = get_fridge_search_query()
     recipe_data = get_themealdb_recipes(ingredient, limit=12) if ingredient else []
 
