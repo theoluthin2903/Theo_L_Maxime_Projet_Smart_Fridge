@@ -552,7 +552,7 @@ def _recipe_description_fr(recipe: dict) -> str:
     return text + "."
 
 
-def get_themealdb_recipes(ingredient: str, limit: int = 12):
+def get_themealdb_recipes(ingredient: str, limit: int | None = None):
     """Retourne des recettes TheMealDB pour les produits du frigo.
 
     - On interroge l'API pour CHAQUE produit (l'API gratuite ne gère pas
