@@ -96,19 +96,25 @@ def nutrition_page(request: Request):
             estimated_label = '<span class="text-xs text-amber-600">Valeurs estimées</span>'
 
         cards.append(f"""
-        <div class="rounded-xl border border-green-100 bg-green-50 p-4">
-            <div class="flex items-center justify-between gap-4">
-                <div>
-                    <h3 class="font-semibold text-slate-800">{name}</h3>
-                    <p class="text-sm text-slate-500">Quantité : {quantity}</p>
+        <article class="recipe-card nutrition-product-card">
+            <div class="fridge-card__top">
+                <span class="fridge-card__emoji" aria-hidden="true">🥗</span>
+                <span class="fridge-card__qty">× {quantity}</span>
+            </div>
+            <div class="recipe-card__body">
+                <h3 class="recipe-card__title">{name}</h3>
+                <div class="recipe-card__meta">
+                    <span class="recipe-tag">🍽️ {quantity} portion{'s' if quantity > 1 else ''}</span>
                     {estimated_label}
                 </div>
-                <div class="text-right">
-                    <p class="font-bold text-slate-800">{round(calories)} kcal</p>
-                    <p class="text-sm text-slate-500">P : {round(proteins)} g · G : {round(carbs)} g · L : {round(fat)} g</p>
+                <div class="nutrition-product-card__stats">
+                    <div><span>Calories</span><strong>{round(calories)} kcal</strong></div>
+                    <div><span>Protéines</span><strong>{round(proteins)} g</strong></div>
+                    <div><span>Glucides</span><strong>{round(carbs)} g</strong></div>
+                    <div><span>Lipides</span><strong>{round(fat)} g</strong></div>
                 </div>
             </div>
-        </div>
+        </article>
         """)
 
     total_calories = round(total_calories)
@@ -169,7 +175,7 @@ def nutrition_page(request: Request):
 
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h2 class="mb-5 text-2xl font-bold text-slate-800">Aliments du frigo</h2>
-            <div class="space-y-3">{cards_html}</div>
+            <div class="recipe-grid">{cards_html}</div>
         </div>
     </div>
     """
