@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Float, Integer, String, event
+from sqlalchemy import Column, Float, Integer, String, Text, UniqueConstraint, event
 
 from app.db.database import Base
 
@@ -30,6 +30,23 @@ class FridgeItemDB(Base):
     expiration_date = Column(String, default="")
     category = Column(String, default="")
     notes = Column(String, default="")
+
+
+class RecipeTranslationDB(Base):
+    __tablename__ = "recipe_translations"
+    __table_args__ = (
+        UniqueConstraint("meal_id", "target_language", name="uq_recipe_translation_meal_language"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    meal_id = Column(String, nullable=False, index=True)
+    recipe_name = Column(String, nullable=True)
+    source_language = Column(String, nullable=False, default="en")
+    target_language = Column(String, nullable=False, default="fr")
+    original_text = Column(Text, nullable=False)
+    translated_text = Column(Text, nullable=False)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
 
 
 class AdminLogDB(Base):
