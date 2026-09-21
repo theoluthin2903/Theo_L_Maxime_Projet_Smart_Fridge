@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.db.database import SessionLocal
 from app.db.models import AdminLogDB, UserDB
@@ -13,6 +13,7 @@ from app.web.data import (
     get_available_products,
     get_fridge_search_query,
     get_themealdb_recipes,
+    get_recipe_instructions_fr,
     get_usda_foods,
     load_fridge_items,
 )
@@ -400,10 +401,13 @@ def recipes_page(request: Request):
             f'<span class="recipe-tag recipe-tag--fridge">🧊 {escape(name)}</span>'
             for name in recipe.get("matched", [])
         )
-        instructions = escape(recipe.get("instructions") or "")
+        meal_id = escape(str(recipe.get("meal_id") or ""), quote=True)
         details = (
-            f'<details class="recipe-card__details"><summary>Voir la préparation</summary><p>{instructions}</p></details>'
-            if instructions
+            f"""<details class="recipe-card__details recipe-preparation" data-meal-id="{meal_id}">
+                <summary>🍳 Voir la préparation</summary>
+                <div class="recipe-preparation__content mt-3 whitespace-pre-line text-sm leading-6 text-slate-700 dark:text-slate-200">Cliquez pour charger la préparation en français…</div>
+            </details>"""
+            if meal_id
             else ""
         )
         return f"""
@@ -430,8 +434,39 @@ def recipes_page(request: Request):
             <h1 class="mb-5 text-3xl font-bold text-slate-800">Recettes</h1>
             <div class="recipe-grid">{cards}</div>
         </div>
+        <script>
+        document.querySelectorAll('.recipe-preparation').forEach((details) => {{
+            details.addEventListener('toggle', async () => {{
+                if (!details.open || details.dataset.loaded === '1' || details.dataset.loading === '1') return;
+                const content = details.querySelector('.recipe-preparation__content');
+                const mealId = details.dataset.mealId;
+                details.dataset.loading = '1';
+                content.textContent = 'Traduction de la préparation en cours…';
+                try {{
+                    const response = await fetch(`/recipes/${{encodeURIComponent(mealId)}}/instructions`);
+                    if (!response.ok) throw new Error('Erreur HTTP ' + response.status);
+                    const data = await response.json();
+                    content.textContent = data.instructions || 'Préparation non disponible.';
+                    details.dataset.loaded = '1';
+                }} catch (error) {{
+                    content.textContent = 'Impossible de charger la préparation pour le moment. Réessayez.';
+                    console.error(error);
+                }} finally {{
+                    details.dataset.loading = '0';
+                }}
+            }});
+        }});
+        </script>
     """
     return render_page("Recettes", "/recipes", body, request)
+
+
+@router.get("/recipes/{meal_id}/instructions", response_class=JSONResponse)
+def recipe_instructions(request: Request, meal_id: str):
+    redirect = require_auth(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentification requise"}, status_code=401)
+    return JSONResponse({"instructions": get_recipe_instructions_fr(meal_id)})
 
 
 @router.get("/alerts", response_class=HTMLResponse)
