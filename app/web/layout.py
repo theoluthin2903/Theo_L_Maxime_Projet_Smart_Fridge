@@ -119,10 +119,24 @@ def is_admin_from_request(request: Request) -> bool:
 
 
 def render_page(title: str, active: str, body: str, request: Request | None = None) -> HTMLResponse:
+    # Une seule lecture Supabase pour le bandeau utilisateur + le rôle admin.
+    # Avant, chaque page faisait deux requêtes identiques vers users.
     if request is not None:
-        user_email = get_user_email_from_request(request)
+        user_email = None
+        is_admin = False
+        token = get_token_from_request(request)
+        if token:
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                user_id = int(payload.get("sub"))
+                with SessionLocal() as db:
+                    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+                    if user:
+                        user_email = user.email
+                        is_admin = bool(user.is_admin)
+            except (JWTError, ValueError, TypeError):
+                pass
         is_logged_in = bool(user_email)
-        is_admin = is_admin_from_request(request)
         welcome_block = f"""
             <div class="mt-6 rounded-xl border border-white/15 bg-white/5 p-3 text-sm text-white/90">
                 <div class="text-xs uppercase tracking-[0.14em] text-white/60">Bienvenue</div>

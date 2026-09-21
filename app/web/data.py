@@ -29,102 +29,10 @@ _RECIPE_CACHE_TTL = 1800  # 30 minutes
 _PRODUCT_CACHE: tuple[float, list[dict]] | None = None
 _PRODUCT_CACHE_TTL = 3600
 
-def _translate_instructions_fr(text: str) -> str:
-    """Traduit une préparation avec MyMemory. La persistance est gérée dans Supabase."""
-    clean_text = (text or "").strip()
-    if not clean_text:
-        return "Préparation non disponible."
-    if MyMemoryTranslator is None:
-        return clean_text
-
-    chunks: list[str] = []
-    remaining = clean_text
-    while remaining:
-        if len(remaining) <= 450:
-            chunks.append(remaining)
-            break
-        cut = max(remaining.rfind(". ", 0, 450), remaining.rfind("\n", 0, 450))
-        if cut < 120:
-            cut = 450
-        else:
-            cut += 1
-        chunks.append(remaining[:cut].strip())
-        remaining = remaining[cut:].strip()
-
-    try:
-        translator = MyMemoryTranslator(source="en-GB", target="fr-FR")
-        translated_parts = [
-            (translator.translate(chunk) or chunk).strip()
-            for chunk in chunks
-        ]
-        translated = "\n\n".join(translated_parts).strip()
-        return translated or clean_text
-    except Exception as exc:
-        print(f"[Traduction recettes] Échec MyMemory : {exc}")
-        return clean_text
-
-
-def get_recipe_instructions_fr(meal_id: str) -> str:
-    """Retourne la traduction Supabase existante ou la crée une seule fois."""
-    meal_id = str(meal_id).strip()
-    if not meal_id:
-        return "Préparation non disponible."
-
-    with SessionLocal() as db:
-        saved = (
-            db.query(RecipeTranslationDB)
-            .filter(
-                RecipeTranslationDB.meal_id == meal_id,
-                RecipeTranslationDB.target_language == "fr",
-            )
-            .first()
-        )
-        if saved and saved.translated_text:
-            return saved.translated_text
-
-    detail = fetch_json(
-        "https://www.themealdb.com/api/json/v1/1/lookup.php",
-        params={"i": meal_id},
-    )
-    meal = (detail.get("meals") or [{}])[0]
-    original = (meal.get("strInstructions") or "").strip()
-    if not original:
-        return "Préparation non disponible."
-
-    translated = _translate_instructions_fr(original)
-
-    # Ne mémorise pas un échec de traduction : un prochain essai pourra retenter.
-    if not translated or translated.casefold() == original.casefold():
-        return original
-
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with SessionLocal() as db:
-        # Nouvelle vérification pour éviter les doublons si deux requêtes arrivent ensemble.
-        saved = (
-            db.query(RecipeTranslationDB)
-            .filter(
-                RecipeTranslationDB.meal_id == meal_id,
-                RecipeTranslationDB.target_language == "fr",
-            )
-            .first()
-        )
-        if saved:
-            return saved.translated_text
-
-        db.add(RecipeTranslationDB(
-            meal_id=meal_id,
-            recipe_name=(meal.get("strMeal") or "").strip() or None,
-            source_language="en",
-            target_language="fr",
-            original_text=original,
-            translated_text=translated,
-            created_at=now,
-            updated_at=now,
-        ))
-        db.commit()
-
-    return translated
-
+# Cache très court du frigo : évite une requête Supabase à chaque clic de navigation.
+# Il est invalidé immédiatement après un ajout/suppression.
+_FRIDGE_CACHE: dict[int, tuple[float, list[dict]]] = {}
+_FRIDGE_CACHE_TTL = 30
 
 def _translate_instructions_fr(text: str) -> str:
     """Traduit une préparation avec MyMemory. La persistance est gérée dans Supabase."""
@@ -223,13 +131,22 @@ def get_recipe_instructions_fr(meal_id: str) -> str:
     return translated
 
 
-def load_fridge_items(user_id: int | None = None):
+def load_fridge_items(user_id: int | None = None, force: bool = False):
     global fridge_items
+    cache_user_id = int(user_id) if user_id is not None else None
+    now = time.monotonic()
+
+    if cache_user_id is not None and not force:
+        cached = _FRIDGE_CACHE.get(cache_user_id)
+        if cached and now - cached[0] < _FRIDGE_CACHE_TTL:
+            fridge_items = [dict(item) for item in cached[1]]
+            return fridge_items
+
     with SessionLocal() as db:
         query = db.query(FridgeItemDB)
-        if user_id is not None:
-            query = query.filter(FridgeItemDB.user_id == int(user_id))
-        fridge_items = [
+        if cache_user_id is not None:
+            query = query.filter(FridgeItemDB.user_id == cache_user_id)
+        loaded = [
             {
                 "id": item.id,
                 "user_id": item.user_id,
@@ -241,6 +158,10 @@ def load_fridge_items(user_id: int | None = None):
             }
             for item in query.order_by(asc(FridgeItemDB.id)).all()
         ]
+
+    fridge_items = loaded
+    if cache_user_id is not None:
+        _FRIDGE_CACHE[cache_user_id] = (now, [dict(item) for item in loaded])
     return fridge_items
 
 
@@ -278,7 +199,8 @@ def add_fridge_item(
             "notes": item.notes or "",
         }
 
-    load_fridge_items(user_id)
+    _FRIDGE_CACHE.pop(int(user_id), None)
+    load_fridge_items(user_id, force=True)
     return created
 
 
@@ -291,7 +213,9 @@ def delete_fridge_item(item_id: int, user_id: int | None = None):
         if deleted:
             db.delete(deleted)
             db.commit()
-    load_fridge_items(user_id)
+    if user_id is not None:
+        _FRIDGE_CACHE.pop(int(user_id), None)
+    load_fridge_items(user_id, force=True)
     return True
 
 

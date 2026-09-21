@@ -14,6 +14,7 @@ def _alerts_body():
         <article class="recipe-card">
             <div class="fridge-card__top">
                 <span class="fridge-card__emoji" aria-hidden="true">🔔</span>
+                
                 <span class="fridge-card__qty">À surveiller</span>
             </div>
             <div class="recipe-card__body">
