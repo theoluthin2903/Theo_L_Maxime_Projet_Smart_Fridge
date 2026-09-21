@@ -488,7 +488,6 @@ def _shorten(text: str, max_len: int = 180) -> str:
     return text[:max_len].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
 
 
-def get_themealdb_recipes(ingredient: str, limit: int | None = None):
 def _estimate_recipe_difficulty(recipe: dict) -> str:
     """Estime la difficulté à partir des ingrédients et de la préparation."""
     instructions = (recipe.get("strInstructions") or "").lower()
