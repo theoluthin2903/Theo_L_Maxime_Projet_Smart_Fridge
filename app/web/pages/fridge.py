@@ -106,7 +106,7 @@ def fridge_page(request: Request):
 
     today = date.today()
     expiration_options = [("", "Pas de date d’expiration")]
-    for offset in range(0, 91):
+    for offset in range(0, 365):
         expiration_day = today + timedelta(days=offset)
         if offset == 0:
             label = f"Aujourd’hui — {expiration_day.strftime('%d/%m/%Y')}"
@@ -308,7 +308,7 @@ def products_page(request: Request):
     if "q" in request.query_params:
         query = request.query_params.get("q", "").strip()
 
-    products_data = get_usda_foods(query, limit=3) if query else []
+    products_data = get_usda_foods(query, limit = None) if query else []
     items_html = "".join(
         f"""
         <li class="rounded-xl border border-green-100 bg-green-50 p-4">
@@ -347,24 +347,46 @@ def recipes_page(request: Request):
         return redirect
 
     ingredient = get_fridge_search_query()
-    recipe_data = get_themealdb_recipes(ingredient, limit=3) if ingredient else []
-    cards = "".join(
-        f"""
-        <div class="rounded-xl border border-green-100 bg-green-50 p-5">
-            <h3 class="mb-2 text-xl font-semibold text-slate-800">{recipe['name']}</h3>
-            <div class="text-sm text-slate-500">Temps : {recipe['time']}</div>
-            <div class="text-sm text-slate-500">Difficulté : {recipe['difficulty']}</div>
-            <p class="mt-3 text-slate-600">{recipe['description']}</p>
-        </div>
+    recipe_data = get_themealdb_recipes(ingredient, limit=12) if ingredient else []
+
+    def recipe_card(recipe):
+        image = (
+            f'<img class="recipe-card__img" src="{escape(recipe["image"])}/preview" alt="{escape(recipe["name"])}" loading="lazy">'
+            if recipe.get("image")
+            else ""
+        )
+        tags = "".join(
+            f'<span class="recipe-tag recipe-tag--fridge">🧊 {escape(name)}</span>'
+            for name in recipe.get("matched", [])
+        )
+        instructions = escape(recipe.get("instructions") or "")
+        details = (
+            f'<details class="recipe-card__details"><summary>Voir la préparation</summary><p>{instructions}</p></details>'
+            if instructions
+            else ""
+        )
+        return f"""
+        <article class="recipe-card">
+            {image}
+            <div class="recipe-card__body">
+                <h3 class="recipe-card__title">{escape(recipe['name'])}</h3>
+                <div class="recipe-card__meta">
+                    <span class="recipe-tag">⏱ {escape(recipe['time'])}</span>
+                    <span class="recipe-tag">👍 {escape(recipe['difficulty'])}</span>
+                </div>
+                <div class="recipe-card__meta">{tags}</div>
+                {details}
+            </div>
+        </article>
         """
-        for recipe in recipe_data
-    )
+
+    cards = "".join(recipe_card(recipe) for recipe in recipe_data)
     if not cards:
         cards = "<div class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-slate-500'>Ajoutez un produit au frigo pour obtenir des recettes correspondantes.</div>"
     body = f"""
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h1 class="mb-5 text-3xl font-bold text-slate-800">Recettes</h1>
-            <div class="grid gap-4 md:grid-cols-3">{cards}</div>
+            <div class="recipe-grid">{cards}</div>
         </div>
     """
     return render_page("Recettes", "/recipes", body, request)
