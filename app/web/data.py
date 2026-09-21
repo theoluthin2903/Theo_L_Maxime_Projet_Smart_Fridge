@@ -489,7 +489,7 @@ def get_usda_foods(query: str, limit: int = None):
             }
             foods.append(candidate)
             seen.add(unique_key)
-            if len(foods) >= limit:
+            if limit is not None and len(foods)>= limit:
                 return foods
 
     return foods
