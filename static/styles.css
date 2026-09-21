@@ -838,3 +838,13 @@ html.dark .fridge-card__qty{background:#0f172a;color:#86efac;box-shadow:none}
 html.dark .fridge-card__notes{color:#cbd5e1}
 html.dark .recipe-tag--warn{background:rgba(245,158,11,.18);color:#fcd34d}
 html.dark .recipe-tag--danger{background:rgba(239,68,68,.18);color:#fca5a5}
+/* ===== Cartes Nutrition / Alertes ===== */
+.nutrition-product-card__stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:2px}
+.nutrition-product-card__stats>div{display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:12px;background:#f8fafc}
+.nutrition-product-card__stats span{font-size:.72rem;color:#64748b}
+.nutrition-product-card__stats strong{font-size:.88rem;color:#0f172a}
+.alert-card .recipe-card__body{gap:12px}
+.alert-card .recipe-card__desc{display:block;-webkit-line-clamp:unset;line-clamp:unset}
+html.dark .nutrition-product-card__stats>div{background:#0f172a}
+html.dark .nutrition-product-card__stats span{color:#94a3b8}
+html.dark .nutrition-product-card__stats strong{color:#f1f5f9}

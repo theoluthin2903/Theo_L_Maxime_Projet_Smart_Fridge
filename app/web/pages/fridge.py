@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.db.database import SessionLocal
 from app.db.models import AdminLogDB, UserDB
@@ -12,7 +12,9 @@ from app.web.data import (
     delete_fridge_item,
     get_available_products,
     get_fridge_search_query,
+    get_alerts,
     get_themealdb_recipes,
+    get_recipe_instructions_fr,
     get_usda_foods,
     load_fridge_items,
 )
@@ -383,10 +385,26 @@ def products_page(request: Request):
 
 @router.get("/recipes", response_class=HTMLResponse)
 def recipes_page(request: Request):
-    redirect = require_auth(request)
-    if redirect:
-        return redirect
+    # Les GET sont volontairement accessibles aux visiteurs dans ce projet.
+    # On contrôle donc explicitement la connexion ici : un visiteur ne doit
+    # jamais réutiliser le contenu du frigo global du dernier utilisateur.
+    user_id = get_user_id_from_cookie(request)
+    if user_id is None:
+        body = """
+        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+            <h1 class="mb-3 text-3xl font-bold text-slate-800">Recettes</h1>
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-5">
+                <p class="font-semibold text-amber-800">Connectez-vous pour voir vos recettes</p>
+                <p class="mt-1 text-sm text-amber-700">Les recettes sont proposées à partir des produits présents dans votre frigo.</p>
+                <a href="/login" class="mt-3 inline-flex rounded-lg bg-pink-500 px-4 py-2 text-sm font-semibold text-white hover:bg-pink-600">Se connecter</a>
+            </div>
+        </div>
+        """
+        return render_page("Recettes", "/recipes", body, request)
 
+    # Une seule requête Supabase suffit pour reconstruire le contexte du frigo.
+    # Cela rend aussi l'accès direct /recipes fiable après connexion/refresh.
+    load_fridge_items(int(user_id))
     ingredient = get_fridge_search_query()
     recipe_data = get_themealdb_recipes(ingredient, limit=12) if ingredient else []
 
@@ -400,10 +418,13 @@ def recipes_page(request: Request):
             f'<span class="recipe-tag recipe-tag--fridge">🧊 {escape(name)}</span>'
             for name in recipe.get("matched", [])
         )
-        instructions = escape(recipe.get("instructions") or "")
+        meal_id = escape(str(recipe.get("meal_id") or ""), quote=True)
         details = (
-            f'<details class="recipe-card__details"><summary>Voir la préparation</summary><p>{instructions}</p></details>'
-            if instructions
+            f"""<details class="recipe-card__details recipe-preparation" data-meal-id="{meal_id}">
+                <summary>🍳 Voir la préparation</summary>
+                <div class="recipe-preparation__content mt-3 whitespace-pre-line text-sm leading-6 text-slate-700 dark:text-slate-200">Cliquez pour charger la préparation en français…</div>
+            </details>"""
+            if meal_id
             else ""
         )
         return f"""
@@ -430,8 +451,74 @@ def recipes_page(request: Request):
             <h1 class="mb-5 text-3xl font-bold text-slate-800">Recettes</h1>
             <div class="recipe-grid">{cards}</div>
         </div>
+        <script>
+        document.querySelectorAll('.recipe-preparation').forEach((details) => {{
+            details.addEventListener('toggle', async () => {{
+                if (!details.open || details.dataset.loaded === '1' || details.dataset.loading === '1') return;
+                const content = details.querySelector('.recipe-preparation__content');
+                const mealId = details.dataset.mealId;
+                details.dataset.loading = '1';
+                content.textContent = 'Traduction de la préparation en cours…';
+                try {{
+                    const response = await fetch(`/recipes/${{encodeURIComponent(mealId)}}/instructions`);
+                    if (!response.ok) throw new Error('Erreur HTTP ' + response.status);
+                    const data = await response.json();
+                    content.textContent = data.instructions || 'Préparation non disponible.';
+                    details.dataset.loaded = '1';
+                }} catch (error) {{
+                    content.textContent = 'Impossible de charger la préparation pour le moment. Réessayez.';
+                    console.error(error);
+                }} finally {{
+                    details.dataset.loading = '0';
+                }}
+            }});
+        }});
+        </script>
     """
     return render_page("Recettes", "/recipes", body, request)
+
+
+@router.get("/recipes/{meal_id}/instructions", response_class=JSONResponse)
+def recipe_instructions(request: Request, meal_id: str):
+    redirect = require_auth(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentification requise"}, status_code=401)
+    return JSONResponse({"instructions": get_recipe_instructions_fr(meal_id)})
+
+
+def _alerts_body():
+    alerts = get_alerts()
+    cards = "".join(
+        f"""
+        <article class="recipe-card">
+            <div class="fridge-card__top">
+                <span class="fridge-card__emoji" aria-hidden="true">🔔</span>
+                <span class="fridge-card__qty">À surveiller</span>
+            </div>
+            <div class="recipe-card__body">
+                <h3 class="recipe-card__title">{alert['title']}</h3>
+                <p class="recipe-card__desc">{alert['message']}</p>
+            </div>
+        </article>
+        """
+        for alert in alerts
+    )
+    return f"""
+        <section class="space-y-6">
+            <div class="overflow-hidden rounded-2xl border border-green-100 bg-white shadow-sm">
+                <div class="bg-gradient-to-br from-green-50 via-white to-emerald-50 px-6 py-7 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900 md:px-8">
+                    <span class="recipe-tag recipe-tag--fridge">🔔 Centre d'alertes</span>
+                    <h1 class="mt-4 text-3xl font-extrabold text-slate-800 dark:text-slate-100">Alertes de votre frigo</h1>
+                    <p class="mt-2 max-w-2xl text-slate-600 dark:text-slate-300">Retrouvez ici les produits à surveiller pour mieux anticiper leur consommation et limiter le gaspillage.</p>
+                    <div class="mt-5 flex flex-wrap gap-2">
+                        <span class="recipe-tag">📋 {len(alerts)} alerte(s)</span>
+                        <a href="/fridge" class="recipe-tag recipe-tag--fridge no-underline">🧊 Voir mon frigo →</a>
+                    </div>
+                </div>
+            </div>
+            <div class="recipe-grid">{cards}</div>
+        </section>
+    """
 
 
 @router.get("/alerts", response_class=HTMLResponse)
@@ -439,22 +526,4 @@ def alerts_page(request: Request):
     redirect = require_auth(request)
     if redirect:
         return redirect
-
-    from app.web.data import get_alerts
-
-    items = "".join(
-        f"""
-        <li class="rounded-xl border border-amber-100 bg-amber-50 p-4">
-            <strong class="block text-slate-800">{alert['title']}</strong>
-            <div class="mt-1 text-sm text-slate-600">{alert['message']}</div>
-        </li>
-        """
-        for alert in get_alerts()
-    )
-    body = f"""
-        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
-            <h1 class="mb-5 text-3xl font-bold text-slate-800">Alertes</h1>
-            <ul class="space-y-3">{items}</ul>
-        </div>
-    """
-    return render_page("Alertes", "/alerts", body, request)
+    return render_page("Alertes", "/alerts", _alerts_body(), request)

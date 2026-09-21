@@ -1,4 +1,6 @@
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 import requests
@@ -18,6 +20,14 @@ load_dotenv()
 
 USDA_API_KEY = os.getenv("USDA_API_KEY")
 fridge_items = []
+
+# Cache court pour éviter de rappeler TheMealDB à chaque navigation Frigo ↔ Recettes.
+_RECIPE_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_RECIPE_CACHE_TTL = 1800  # 30 minutes
+
+# Catalogue du formulaire Frigo : TheMealDB change très peu, on le garde 1 h.
+_PRODUCT_CACHE: tuple[float, list[dict]] | None = None
+_PRODUCT_CACHE_TTL = 3600
 
 def _translate_instructions_fr(text: str) -> str:
     """Traduit une préparation avec MyMemory. La persistance est gérée dans Supabase."""
@@ -586,7 +596,7 @@ def get_usda_foods(query: str, limit: int = None):
             }
             foods.append(candidate)
             seen.add(unique_key)
-            if limit is not None and len(foods)>= limit:
+            if len(foods) >= limit:
                 return foods
 
     return foods
@@ -594,62 +604,49 @@ def get_usda_foods(query: str, limit: int = None):
 
 
 def get_available_products(query: str = "", limit: int = None):
-    """Retourne les produits réellement renvoyés par les APIs, sans données codées en dur."""
-    products: list[dict] = []
-    seen: set[str] = set()
+    """Catalogue rapide pour le formulaire Frigo, sans rafale d'appels USDA.
 
-    def add_product(name: str, category: str = "Autre"):
-        cleaned = (name or "").strip()
-        if not cleaned:
-            return
-        key = normalize_name(cleaned)
-        if key and key not in seen:
-            seen.add(key)
-            products.append({
-                "name": cleaned,
-                "category": _infer_product_category(cleaned, category),
-            })
+    Le catalogue complet TheMealDB est chargé une seule fois puis conservé une
+    heure en mémoire. USDA reste utilisé par les fonctions de nutrition, mais
+    plus pour construire le menu déroulant à chaque navigation.
+    """
+    global _PRODUCT_CACHE
+    now = time.monotonic()
 
-    search_terms = [query.strip()] if query and query.strip() else [
-        "milk", "apple", "tomato", "chicken", "bread", "rice", "egg", "cheese",
-        "fish", "pasta", "banana", "yogurt", "beef", "salad", "mushroom",
-        "carrot", "lentil", "bean", "orange", "onion", "garlic", "potato",
-        "spinach", "lemon", "olive", "pepper", "salmon", "shrimp", "tuna",
-        "chickpea", "lentils", "mustard", "butter", "flour", "sugar", "oil",
-        "cucumber", "lettuce", "broccoli", "pear", "strawberry", "parsley",
-        "thyme", "basil", "paprika", "vanilla", "chocolate"
-    ]
+    if _PRODUCT_CACHE and now - _PRODUCT_CACHE[0] < _PRODUCT_CACHE_TTL:
+        products = [dict(product) for product in _PRODUCT_CACHE[1]]
+    else:
+        products: list[dict] = []
+        seen: set[str] = set()
+        try:
+            meal_db = fetch_json(
+                "https://www.themealdb.com/api/json/v1/1/list.php",
+                params={"i": "list"},
+                timeout=5,
+            )
+            for ingredient in (meal_db.get("meals") or []):
+                name = (ingredient.get("strIngredient") or "").strip()
+                key = normalize_name(name)
+                if name and key and key not in seen:
+                    seen.add(key)
+                    products.append({
+                        "name": name,
+                        "category": _infer_product_category(name, "Ingrédient"),
+                    })
+        except Exception as exc:
+            print(f"[Frigo] Catalogue TheMealDB indisponible : {exc}")
 
-    for term in search_terms:
-        term = (term or "").strip()
-        if not term:
-            continue
+        products.sort(key=lambda item: item["name"].casefold())
+        _PRODUCT_CACHE = (now, [dict(product) for product in products])
 
-        for item in get_usda_foods(term, limit):
-            add_product(item.get("name", ""), item.get("category", "Autre"))
-
-    try:
-        meal_db = fetch_json(
-            "https://www.themealdb.com/api/json/v1/1/list.php",
-            params={"i": "list"},
-            timeout=8,
-        )
-        for ingredient in (meal_db.get("meals") or []):
-            ingredient_name = (ingredient.get("strIngredient") or "").strip()
-            if ingredient_name:
-                add_product(ingredient_name, "Ingrédient")
-    except Exception:
-        pass
-
-    if query:
-        filtered = [
+    if query and query.strip():
+        needle = normalize_name(query)
+        products = [
             product for product in products
-            if normalize_name(query) in normalize_name(product["name"]) or normalize_name(product["name"]) in normalize_name(query)
+            if needle in normalize_name(product["name"])
         ]
-        return filtered[:limit]
 
-    return sorted(products, key=lambda item: item["name"].lower())[:limit]
-
+    return products[:limit] if limit is not None else products
 
 def get_available_product_names(query: str = "", limit: int = None):
     products = get_available_products(query=query, limit=limit)
@@ -752,22 +749,30 @@ def _recipe_description_fr(recipe: dict) -> str:
 
 
 def get_themealdb_recipes(ingredient: str, limit: int | None = None):
-    """Retourne des recettes TheMealDB pour les produits du frigo.
+    """Retourne rapidement les recettes TheMealDB correspondant au frigo.
 
-    - On interroge l'API pour CHAQUE produit (l'API gratuite ne gère pas
-      plusieurs ingrédients d'un coup).
-    - Les recettes qui utilisent plusieurs produits du frigo passent en premier.
-    - Ensuite on alterne entre les produits (round-robin) pour que le premier
-      produit ne prenne pas toute la place.
+    Les résultats sont gardés 10 minutes en mémoire et les détails des recettes
+    sont récupérés en parallèle. Cela évite 10 à 20 appels HTTP séquentiels à
+    chaque aller-retour entre les pages Frigo et Recettes.
     """
     if not ingredient:
         return []
 
+    cache_key = f"{ingredient.strip().casefold()}|{limit or 'all'}"
+    cached = _RECIPE_CACHE.get(cache_key)
+    now = time.monotonic()
+    if cached and now - cached[0] < _RECIPE_CACHE_TTL:
+        # Une copie évite qu'une page modifie accidentellement le cache.
+        return [dict(recipe) for recipe in cached[1]]
+
     terms = []
+    normalized_terms = set()
     for term in ingredient.replace(";", ",").split(","):
         term = term.strip()
-        if term and normalize_name(term) not in [normalize_name(t) for t in terms]:
+        normalized = normalize_name(term)
+        if term and normalized and normalized not in normalized_terms:
             terms.append(term)
+            normalized_terms.add(normalized)
     if not terms:
         return []
 
@@ -775,29 +780,33 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
     matched_by_meal: dict[str, list[str]] = {}
     meal_info: dict[str, dict] = {}
 
-    for term in terms:
+    # Les recherches par ingrédient sont indépendantes : on les lance ensemble.
+    def fetch_for_term(term: str):
         try:
             filtered = fetch_json(
                 "https://www.themealdb.com/api/json/v1/1/filter.php",
                 params={"i": term.replace(" ", "_")},
+                timeout=8,
             )
+            return term, [m for m in (filtered.get("meals") or []) if m.get("idMeal")]
         except Exception:
-            continue
+            return term, []
 
-        meals = [m for m in (filtered.get("meals") or []) if m.get("idMeal")]
-        per_term[term] = meals
-        for meal in meals:
-            meal_id = meal["idMeal"]
-            meal_info.setdefault(meal_id, meal)
-            matched_by_meal.setdefault(meal_id, []).append(term)
+    with ThreadPoolExecutor(max_workers=min(6, max(1, len(terms)))) as executor:
+        futures = [executor.submit(fetch_for_term, term) for term in terms]
+        for future in as_completed(futures):
+            term, meals = future.result()
+            per_term[term] = meals
+            for meal in meals:
+                meal_id = meal["idMeal"]
+                meal_info.setdefault(meal_id, meal)
+                matched_by_meal.setdefault(meal_id, []).append(term)
 
-    # 1) recettes qui utilisent plusieurs produits du frigo (les plus complètes d'abord)
     ordered = sorted(
         (mid for mid, matched in matched_by_meal.items() if len(matched) > 1),
         key=lambda mid: -len(matched_by_meal[mid]),
     )
 
-    # 2) puis alternance entre les produits pour équilibrer les résultats
     max_len = max((len(m) for m in per_term.values()), default=0)
     for index in range(max_len):
         for term in terms:
@@ -805,27 +814,37 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
             if index < len(meals) and meals[index]["idMeal"] not in ordered:
                 ordered.append(meals[index]["idMeal"])
 
-    result = []
-    seen = set()
+    # On ne demande les détails que pour le nombre de cartes réellement affiché.
+    candidate_ids = ordered[:limit] if limit is not None else ordered
 
-    for meal_id in ordered:
-        if limit is not None and len(result) >= limit:
-            break
+    def fetch_detail(meal_id: str):
         try:
             detail = fetch_json(
                 "https://www.themealdb.com/api/json/v1/1/lookup.php",
                 params={"i": meal_id},
+                timeout=8,
             )
+            return meal_id, (detail.get("meals") or [{}])[0]
         except Exception:
-            continue
+            return meal_id, {}
 
-        d = (detail.get("meals") or [{}])[0]
-        recipe_name = d.get("strMeal", meal_info[meal_id].get("strMeal", "Recette"))
+    details_by_id: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=min(6, max(1, len(candidate_ids)))) as executor:
+        futures = [executor.submit(fetch_detail, meal_id) for meal_id in candidate_ids]
+        for future in as_completed(futures):
+            meal_id, detail = future.result()
+            details_by_id[meal_id] = detail
+
+    result = []
+    seen = set()
+    for meal_id in candidate_ids:
+        d = details_by_id.get(meal_id) or {}
+        fallback = meal_info.get(meal_id, {})
+        recipe_name = d.get("strMeal") or fallback.get("strMeal") or "Recette"
         normalized_name = normalize_name(recipe_name)
         if not normalized_name or normalized_name in seen:
             continue
 
-        instructions = (d.get("strInstructions") or "").strip()
         result.append(
             {
                 "name": recipe_name,
@@ -834,12 +853,13 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
                 "description": _recipe_description_fr(d),
                 "instructions": "",
                 "meal_id": str(d.get("idMeal") or meal_id),
-                "image": d.get("strMealThumb") or meal_info[meal_id].get("strMealThumb") or "",
+                "image": d.get("strMealThumb") or fallback.get("strMealThumb") or "",
                 "matched": matched_by_meal.get(meal_id, []),
             }
         )
         seen.add(normalized_name)
 
+    _RECIPE_CACHE[cache_key] = (now, [dict(recipe) for recipe in result])
     return result
 
 
