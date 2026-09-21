@@ -359,6 +359,9 @@ def recipes_page(request: Request):
     if redirect:
         return redirect
 
+    user_id = get_user_id_from_cookie(request)
+    load_fridge_items(user_id)
+    
     ingredient = get_fridge_search_query()
     recipe_data = get_themealdb_recipes(ingredient, limit = None) if ingredient else []
 
