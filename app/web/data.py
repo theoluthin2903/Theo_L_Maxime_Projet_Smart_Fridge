@@ -1,18 +1,14 @@
 import os
-from datetime import datetime
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from dotenv import load_dotenv
-try:
-    from deep_translator import MyMemoryTranslator
-except ImportError:
-    MyMemoryTranslator = None
-
 from pydantic import BaseModel
 from sqlalchemy import asc
 
 from app.db.database import SessionLocal
-from app.db.models import FridgeItemDB, RecipeTranslationDB
+from app.db.models import FridgeItemDB
 
 load_dotenv()
 
@@ -242,8 +238,24 @@ def get_fridge_search_query():
     return ", ".join(names) if names else ""
 
 
+_session = requests.Session()  # réutilise les connexions HTTP (évite un handshake TLS à chaque appel)
+_CACHE: dict = {}
+
+
+def _cached(key, ttl, compute, cache_empty=True):
+    """Cache mémoire simple : recalcule seulement si l'entrée a plus de `ttl` secondes."""
+    now = time.time()
+    hit = _CACHE.get(key)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    value = compute()
+    if value or cache_empty:
+        _CACHE[key] = (now, value)
+    return value
+
+
 def fetch_json(url: str, params: dict | None = None, timeout: int = 15):
-    response = requests.get(url, params=params, timeout=timeout)
+    response = _session.get(url, params=params, timeout=timeout)
     response.raise_for_status()
     return response.json()
 
@@ -445,7 +457,7 @@ def get_usda_foods(query: str, limit: int = None):
                 params={
                     "query": term,
                     "dataType": ["SR Legacy", "Foundation"],
-                    "pageSize": 200 if limit is None else max(5, limit),
+                    "pageSize": max(5, limit),
                     "api_key": USDA_API_KEY,
                 },
             )
@@ -498,6 +510,15 @@ def get_usda_foods(query: str, limit: int = None):
 
 
 def get_available_products(query: str = "", limit: int = None):
+    return _cached(
+        ("products", query, limit),
+        3600,
+        lambda: _build_available_products(query, limit),
+        cache_empty=False,  # si les APIs sont en panne, on réessaie au prochain chargement
+    )
+
+
+def _build_available_products(query: str = "", limit: int = None):
     """Retourne les produits réellement renvoyés par les APIs, sans données codées en dur."""
     products: list[dict] = []
     seen: set[str] = set()
@@ -524,12 +545,12 @@ def get_available_products(query: str = "", limit: int = None):
         "thyme", "basil", "paprika", "vanilla", "chocolate"
     ]
 
-    for term in search_terms:
-        term = (term or "").strip()
-        if not term:
-            continue
+    terms = [(t or "").strip() for t in search_terms if (t or "").strip()]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda t: get_usda_foods(t, limit), terms))  # garde l'ordre
 
-        for item in get_usda_foods(term, limit):
+    for foods in results:
+        for item in foods:
             add_product(item.get("name", ""), item.get("category", "Autre"))
 
     try:
@@ -591,79 +612,52 @@ def _shorten(text: str, max_len: int = 180) -> str:
     return text[:max_len].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
 
 
-def _estimate_recipe_difficulty(recipe: dict) -> str:
-    """Estime la difficulté à partir des ingrédients et de la préparation."""
-    instructions = (recipe.get("strInstructions") or "").lower()
-    ingredient_count = len(flatten_meal_ingredients(recipe))
-    score = 0
-
-    if ingredient_count >= 8:
-        score += 1
-    if ingredient_count >= 13:
-        score += 1
-    if len(instructions) >= 700:
-        score += 1
-    if len(instructions) >= 1400:
-        score += 1
-
-    advanced_terms = (
-        "marinate", "knead", "proof", "reduce", "caramel", "deep fry",
-        "bain-marie", "temper", "fillet", "debone", "stuff", "roast",
-    )
-    score += min(2, sum(term in instructions for term in advanced_terms))
-
-    if score >= 4:
-        return "Difficile"
-    if score >= 2:
-        return "Moyenne"
-    return "Facile"
+def _translate(text: str) -> str:
+    """Utilise translate_text() si vous l'avez ajouté, sinon renvoie le texte tel quel."""
+    fn = globals().get("translate_text")
+    return fn(text) if fn else text
 
 
-def _recipe_description_fr(recipe: dict) -> str:
-    """Crée une courte description en français à partir des métadonnées TheMealDB."""
-    category_map = {
-        "beef": "bœuf", "chicken": "poulet", "dessert": "dessert",
-        "lamb": "agneau", "miscellaneous": "plat varié", "pasta": "pâtes",
-        "pork": "porc", "seafood": "fruits de mer", "side": "accompagnement",
-        "starter": "entrée", "vegan": "plat végétalien",
-        "vegetarian": "plat végétarien", "breakfast": "petit-déjeuner",
-        "goat": "chèvre",
-    }
-    area_map = {
-        "american": "américaine", "british": "britannique", "canadian": "canadienne",
-        "chinese": "chinoise", "croatian": "croate", "dutch": "néerlandaise",
-        "egyptian": "égyptienne", "filipino": "philippine", "french": "française",
-        "greek": "grecque", "indian": "indienne", "irish": "irlandaise",
-        "italian": "italienne", "jamaican": "jamaïcaine", "japanese": "japonaise",
-        "kenyan": "kényane", "malaysian": "malaisienne", "mexican": "mexicaine",
-        "moroccan": "marocaine", "polish": "polonaise", "portuguese": "portugaise",
-        "russian": "russe", "spanish": "espagnole", "thai": "thaïlandaise",
-        "tunisian": "tunisienne", "turkish": "turque", "vietnamese": "vietnamienne",
-    }
-    category_raw = (recipe.get("strCategory") or "").strip().lower()
-    area_raw = (recipe.get("strArea") or "").strip().lower()
-    category = category_map.get(category_raw, "plat savoureux")
-    area = area_map.get(area_raw)
-    ingredient_count = len(flatten_meal_ingredients(recipe))
+def _fetch_meals_for_term(term: str) -> list[dict]:
+    def compute():
+        data = fetch_json(
+            "https://www.themealdb.com/api/json/v1/1/filter.php",
+            params={"i": term.replace(" ", "_")},
+        )
+        return [m for m in (data.get("meals") or []) if m.get("idMeal")]
 
-    if area:
-        text = f"Découvrez ce {category} inspiré de la cuisine {area}, simple à préparer à la maison"
-    else:
-        text = f"Découvrez ce {category}, une recette savoureuse à préparer à la maison"
-    if ingredient_count:
-        text += f" avec {ingredient_count} ingrédients principaux"
-    return text + "."
+    try:
+        return _cached(("filter", normalize_name(term)), 86400, compute)
+    except Exception:
+        return []
+
+
+def _load_recipe(meal_id: str):
+    def compute():
+        detail = fetch_json(
+            "https://www.themealdb.com/api/json/v1/1/lookup.php",
+            params={"i": meal_id},
+        )
+        d = (detail.get("meals") or [{}])[0]
+        instructions = (d.get("strInstructions") or "").strip()
+        instructions_fr = _translate(instructions)  # retirez si vous n'avez pas la traduction
+        return {
+            "raw_name": d.get("strMeal", ""),
+            "name": _translate(d.get("strMeal", "Recette")),
+            "time": _estimate_recipe_time(d),
+            "difficulty": "Facile",
+            "description": _shorten(instructions_fr) or "Aucune description disponible.",
+            "instructions": instructions_fr,
+            "image": d.get("strMealThumb") or "",
+        }
+
+    try:
+        return _cached(("recipe", meal_id), 86400, compute)
+    except Exception:
+        return None
 
 
 def get_themealdb_recipes(ingredient: str, limit: int | None = None):
-    """Retourne des recettes TheMealDB pour les produits du frigo.
-
-    - On interroge l'API pour CHAQUE produit (l'API gratuite ne gère pas
-      plusieurs ingrédients d'un coup).
-    - Les recettes qui utilisent plusieurs produits du frigo passent en premier.
-    - Ensuite on alterne entre les produits (round-robin) pour que le premier
-      produit ne prenne pas toute la place.
-    """
     if not ingredient:
         return []
 
@@ -675,33 +669,21 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
     if not terms:
         return []
 
-    per_term: dict[str, list[dict]] = {}
+    # 1) une requête par produit, en parallèle (et mises en cache 24 h)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        meals_lists = list(pool.map(_fetch_meals_for_term, terms))
+    per_term = dict(zip(terms, meals_lists))
+
     matched_by_meal: dict[str, list[str]] = {}
-    meal_info: dict[str, dict] = {}
-
-    for term in terms:
-        try:
-            filtered = fetch_json(
-                "https://www.themealdb.com/api/json/v1/1/filter.php",
-                params={"i": term.replace(" ", "_")},
-            )
-        except Exception:
-            continue
-
-        meals = [m for m in (filtered.get("meals") or []) if m.get("idMeal")]
-        per_term[term] = meals
+    for term, meals in per_term.items():
         for meal in meals:
-            meal_id = meal["idMeal"]
-            meal_info.setdefault(meal_id, meal)
-            matched_by_meal.setdefault(meal_id, []).append(term)
+            matched_by_meal.setdefault(meal["idMeal"], []).append(term)
 
-    # 1) recettes qui utilisent plusieurs produits du frigo (les plus complètes d'abord)
+    # 2) ordre : recettes multi-produits d'abord, puis alternance entre produits
     ordered = sorted(
         (mid for mid, matched in matched_by_meal.items() if len(matched) > 1),
         key=lambda mid: -len(matched_by_meal[mid]),
     )
-
-    # 2) puis alternance entre les produits pour équilibrer les résultats
     max_len = max((len(m) for m in per_term.values()), default=0)
     for index in range(max_len):
         for term in terms:
@@ -709,41 +691,22 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
             if index < len(meals) and meals[index]["idMeal"] not in ordered:
                 ordered.append(meals[index]["idMeal"])
 
-    result = []
-    seen = set()
+    # 3) détails (+ traduction) des recettes retenues, en parallèle et en cache
+    candidates = ordered if limit is None else ordered[: limit + 4]  # +4 = marge pour les échecs/doublons
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        loaded = list(pool.map(_load_recipe, candidates))
 
-    for meal_id in ordered:
+    result, seen = [], set()
+    for meal_id, recipe in zip(candidates, loaded):
+        if recipe is None:
+            continue
+        key = normalize_name(recipe["raw_name"])
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append({**recipe, "matched": matched_by_meal.get(meal_id, [])})
         if limit is not None and len(result) >= limit:
             break
-        try:
-            detail = fetch_json(
-                "https://www.themealdb.com/api/json/v1/1/lookup.php",
-                params={"i": meal_id},
-            )
-        except Exception:
-            continue
-
-        d = (detail.get("meals") or [{}])[0]
-        recipe_name = d.get("strMeal", meal_info[meal_id].get("strMeal", "Recette"))
-        normalized_name = normalize_name(recipe_name)
-        if not normalized_name or normalized_name in seen:
-            continue
-
-        instructions = (d.get("strInstructions") or "").strip()
-        result.append(
-            {
-                "name": recipe_name,
-                "time": _estimate_recipe_time(d),
-                "difficulty": _estimate_recipe_difficulty(d),
-                "description": _recipe_description_fr(d),
-                "instructions": "",
-                "meal_id": str(d.get("idMeal") or meal_id),
-                "image": d.get("strMealThumb") or meal_info[meal_id].get("strMealThumb") or "",
-                "matched": matched_by_meal.get(meal_id, []),
-            }
-        )
-        seen.add(normalized_name)
-
     return result
 
 

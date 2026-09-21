@@ -13,7 +13,6 @@ from app.web.data import (
     get_available_products,
     get_fridge_search_query,
     get_themealdb_recipes,
-    get_recipe_instructions_fr,
     get_usda_foods,
     load_fridge_items,
 )
@@ -41,28 +40,69 @@ def fridge_page(request: Request):
     user_id = get_user_id_from_cookie(request)
     is_logged_in = user_id is not None
     items = load_fridge_items(user_id) if is_logged_in else []
-    items_html = "".join(
-        f"""
-        <li class="rounded-xl border border-green-100 bg-green-50 p-4">
-            <div class="flex items-start justify-between gap-3">
-                <div>
-                    <strong class="block text-slate-800">{item['name']}</strong>
-                    <div class="mt-1 text-sm text-slate-500">Quantité : {item['quantity']}</div>
-                    <div class="mt-1 text-sm text-slate-500">Catégorie : {item['category'] or '—'}</div>
-                    <div class="mt-1 text-sm text-slate-500">Expiration : {item['expiration_date'] or '—'}</div>
-                    <div class="mt-1 text-sm text-slate-500">{item['notes'] or 'Aucune note'}</div>
-                </div>
-                {("<form method='post' action='/fridge/delete'>"
-                  f"<input type='hidden' name='item_id' value='{item['id']}' />"
-                  "<button type='submit' class='rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100'>Supprimer</button>"
-                  "</form>") if is_logged_in else ""}
+    def category_emoji(category: str) -> str:
+        text = (category or "").lower()
+        for keywords, emoji in [
+            (("fruit",), "🍎"),
+            (("légume", "legume", "vegetable"), "🥕"),
+            (("viande", "meat", "poultry", "volaille"), "🥩"),
+            (("poisson", "fish", "seafood"), "🐟"),
+            (("lait", "dairy", "fromage", "cheese", "oeuf", "œuf", "egg"), "🧀"),
+            (("boisson", "drink", "beverage"), "🥤"),
+            (("épice", "epice", "spice", "condiment", "sauce"), "🌶️"),
+            (("céréale", "cereale", "grain", "pain", "bread", "pâte", "pasta"), "🌾"),
+            (("dessert", "sweet", "chocolat", "chocolate", "sucre"), "🍫"),
+        ]:
+            if any(keyword in text for keyword in keywords):
+                return emoji
+        return "🍽️"
+
+    def expiration_badge(expiration: str) -> str:
+        if not expiration:
+            return '<span class="recipe-tag">📅 Pas de date</span>'
+        try:
+            days_left = (date.fromisoformat(expiration) - date.today()).days
+        except ValueError:
+            return f'<span class="recipe-tag">📅 {escape(expiration)}</span>'
+        if days_left < 0:
+            return f'<span class="recipe-tag recipe-tag--danger">⚠️ Expiré ({escape(expiration)})</span>'
+        if days_left <= 3:
+            return f'<span class="recipe-tag recipe-tag--warn">⏳ Expire le {escape(expiration)}</span>'
+        return f'<span class="recipe-tag recipe-tag--fridge">📅 Expire le {escape(expiration)}</span>'
+
+    def fridge_card(item):
+        delete_form = (
+            "<form method='post' action='/fridge/delete' class='fridge-card__delete'>"
+            f"<input type='hidden' name='item_id' value='{item['id']}' />"
+            "<button type='submit' class='rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100'>Supprimer</button>"
+            "</form>"
+            if is_logged_in
+            else ""
+        )
+        category = item.get("category") or ""
+        category_tag = (
+            f'<span class="recipe-tag">{escape(category)}</span>' if category else ""
+        )
+        notes = item.get("notes") or ""
+        notes_html = f'<p class="fridge-card__notes">📝 {escape(notes)}</p>' if notes else ""
+        return f"""
+        <article class="recipe-card fridge-card">
+            <div class="fridge-card__top">
+                <span class="fridge-card__emoji" aria-hidden="true">{category_emoji(category)}</span>
+                <span class="fridge-card__qty">× {escape(str(item['quantity']))}</span>
             </div>
-        </li>
+            <div class="recipe-card__body">
+                <h3 class="recipe-card__title">{escape(item['name'])}</h3>
+                <div class="recipe-card__meta">{category_tag}{expiration_badge(item.get('expiration_date'))}</div>
+                {notes_html}
+                {delete_form}
+            </div>
+        </article>
         """
-        for item in items
-    )
+
+    items_html = "".join(fridge_card(item) for item in items)
     if not items_html:
-        items_html = "<li class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-slate-500'>Votre frigo est vide pour le moment.</li>"
+        items_html = "<div class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-slate-500'>Votre frigo est vide pour le moment.</div>"
 
     visitor_notice = "" if is_logged_in else """
         <div class="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -223,7 +263,7 @@ def fridge_page(request: Request):
 
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h2 class="mb-4 text-2xl font-bold text-slate-800">Contenu actuel</h2>
-            <ul class="space-y-3">{items_html}</ul>
+            <div class="recipe-grid">{items_html}</div>
         </div>
     """
     return render_page("Mon frigo", "/fridge", body, request)
@@ -341,29 +381,14 @@ def products_page(request: Request):
     return render_page("Produits", "/products", body, request)
 
 
-@router.get("/recipes/{meal_id}/instructions")
-def recipe_instructions(meal_id: str, request: Request):
-    redirect = require_auth(request)
-    if redirect:
-        return {"error": "Authentification requise"}
-    try:
-        return {"instructions": get_recipe_instructions_fr(meal_id)}
-    except Exception as exc:
-        print(f"[Recettes] Impossible de charger la préparation {meal_id} : {exc}")
-        return {"error": "Impossible de charger la préparation pour le moment."}
-
-
 @router.get("/recipes", response_class=HTMLResponse)
 def recipes_page(request: Request):
     redirect = require_auth(request)
     if redirect:
         return redirect
 
-    user_id = get_user_id_from_cookie(request)
-    load_fridge_items(user_id)
-    
     ingredient = get_fridge_search_query()
-    recipe_data = get_themealdb_recipes(ingredient, limit = None) if ingredient else []
+    recipe_data = get_themealdb_recipes(ingredient, limit=12) if ingredient else []
 
     def recipe_card(recipe):
         image = (
@@ -375,13 +400,11 @@ def recipes_page(request: Request):
             f'<span class="recipe-tag recipe-tag--fridge">🧊 {escape(name)}</span>'
             for name in recipe.get("matched", [])
         )
-        meal_id = escape(str(recipe.get("meal_id") or ""))
+        instructions = escape(recipe.get("instructions") or "")
         details = (
-            f'<details class="recipe-card__details recipe-preparation" data-meal-id="{meal_id}">'
-            '<summary>Voir la préparation</summary>'
-            '<p class="recipe-instructions">Cliquez pour charger la préparation en français…</p>'
-            '</details>'
-            if meal_id else ""
+            f'<details class="recipe-card__details"><summary>Voir la préparation</summary><p>{instructions}</p></details>'
+            if instructions
+            else ""
         )
         return f"""
         <article class="recipe-card">
@@ -393,7 +416,7 @@ def recipes_page(request: Request):
                     <span class="recipe-tag">👍 {escape(recipe['difficulty'])}</span>
                 </div>
                 <div class="recipe-card__meta">{tags}</div>
-                <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{escape(recipe.get('description') or '')}</p>
+                <p class="recipe-card__desc">{escape(recipe['description'])}</p>
                 {details}
             </div>
         </article>
@@ -407,29 +430,6 @@ def recipes_page(request: Request):
             <h1 class="mb-5 text-3xl font-bold text-slate-800">Recettes</h1>
             <div class="recipe-grid">{cards}</div>
         </div>
-    """
-    body += r"""
-    <script>
-    document.querySelectorAll('.recipe-preparation').forEach((details) => {
-        details.addEventListener('toggle', async () => {
-            if (!details.open || details.dataset.loaded === '1' || details.dataset.loading === '1') return;
-            details.dataset.loading = '1';
-            const target = details.querySelector('.recipe-instructions');
-            target.textContent = 'Traduction de la préparation…';
-            try {
-                const response = await fetch(`/recipes/${details.dataset.mealId}/instructions`);
-                const data = await response.json();
-                if (!response.ok || data.error) throw new Error(data.error || 'Erreur de traduction');
-                target.textContent = data.instructions || 'Préparation non disponible.';
-                details.dataset.loaded = '1';
-            } catch (error) {
-                target.textContent = 'Impossible de charger la préparation pour le moment.';
-            } finally {
-                details.dataset.loading = '0';
-            }
-        });
-    });
-    </script>
     """
     return render_page("Recettes", "/recipes", body, request)
 
