@@ -13,6 +13,7 @@ from app.web.data import (
     get_available_products,
     get_fridge_search_query,
     get_themealdb_recipes,
+    get_recipe_instructions_fr,
     get_usda_foods,
     load_fridge_items,
 )
@@ -340,6 +341,18 @@ def products_page(request: Request):
     return render_page("Produits", "/products", body, request)
 
 
+@router.get("/recipes/{meal_id}/instructions")
+def recipe_instructions(meal_id: str, request: Request):
+    redirect = require_auth(request)
+    if redirect:
+        return {"error": "Authentification requise"}
+    try:
+        return {"instructions": get_recipe_instructions_fr(meal_id)}
+    except Exception as exc:
+        print(f"[Recettes] Impossible de charger la préparation {meal_id} : {exc}")
+        return {"error": "Impossible de charger la préparation pour le moment."}
+
+
 @router.get("/recipes", response_class=HTMLResponse)
 def recipes_page(request: Request):
     redirect = require_auth(request)
@@ -359,11 +372,13 @@ def recipes_page(request: Request):
             f'<span class="recipe-tag recipe-tag--fridge">🧊 {escape(name)}</span>'
             for name in recipe.get("matched", [])
         )
-        instructions = escape(recipe.get("instructions") or "")
+        meal_id = escape(str(recipe.get("meal_id") or ""))
         details = (
-            f'<details class="recipe-card__details"><summary>Voir la préparation</summary><p>{instructions}</p></details>'
-            if instructions
-            else ""
+            f'<details class="recipe-card__details recipe-preparation" data-meal-id="{meal_id}">'
+            '<summary>Voir la préparation</summary>'
+            '<p class="recipe-instructions">Cliquez pour charger la préparation en français…</p>'
+            '</details>'
+            if meal_id else ""
         )
         return f"""
         <article class="recipe-card">
@@ -389,6 +404,29 @@ def recipes_page(request: Request):
             <h1 class="mb-5 text-3xl font-bold text-slate-800">Recettes</h1>
             <div class="recipe-grid">{cards}</div>
         </div>
+    """
+    body += r"""
+    <script>
+    document.querySelectorAll('.recipe-preparation').forEach((details) => {
+        details.addEventListener('toggle', async () => {
+            if (!details.open || details.dataset.loaded === '1' || details.dataset.loading === '1') return;
+            details.dataset.loading = '1';
+            const target = details.querySelector('.recipe-instructions');
+            target.textContent = 'Traduction de la préparation…';
+            try {
+                const response = await fetch(`/recipes/${details.dataset.mealId}/instructions`);
+                const data = await response.json();
+                if (!response.ok || data.error) throw new Error(data.error || 'Erreur de traduction');
+                target.textContent = data.instructions || 'Préparation non disponible.';
+                details.dataset.loaded = '1';
+            } catch (error) {
+                target.textContent = 'Impossible de charger la préparation pour le moment.';
+            } finally {
+                details.dataset.loading = '0';
+            }
+        });
+    });
+    </script>
     """
     return render_page("Recettes", "/recipes", body, request)
 

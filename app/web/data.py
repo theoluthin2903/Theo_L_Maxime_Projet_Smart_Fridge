@@ -2,6 +2,11 @@ import os
 
 import requests
 from dotenv import load_dotenv
+try:
+    from deep_translator import MyMemoryTranslator
+except ImportError:
+    MyMemoryTranslator = None
+
 from pydantic import BaseModel
 from sqlalchemy import asc
 
@@ -12,6 +17,80 @@ load_dotenv()
 
 USDA_API_KEY = os.getenv("USDA_API_KEY")
 fridge_items = []
+
+_TRANSLATION_CACHE_FILE = os.path.join(os.path.dirname(__file__), "recipe_translations.json")
+
+
+def _load_translation_cache() -> dict[str, str]:
+    try:
+        import json
+        with open(_TRANSLATION_CACHE_FILE, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+            return data if isinstance(data, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+_translation_cache: dict[str, str] = _load_translation_cache()
+
+
+def _save_translation_cache() -> None:
+    import json
+    try:
+        with open(_TRANSLATION_CACHE_FILE, "w", encoding="utf-8") as handle:
+            json.dump(_translation_cache, handle, ensure_ascii=False, indent=2)
+    except OSError as exc:
+        print(f"[Traduction recettes] Cache non sauvegardé : {exc}")
+
+
+def _translate_instructions_fr(text: str) -> str:
+    """Traduit une préparation à la demande avec MyMemory et la mémorise sur disque."""
+    clean_text = (text or "").strip()
+    if not clean_text:
+        return "Préparation non disponible."
+    if clean_text in _translation_cache:
+        return _translation_cache[clean_text]
+    if MyMemoryTranslator is None:
+        return clean_text
+
+    # MyMemory accepte des textes courts : on découpe proprement la préparation.
+    chunks: list[str] = []
+    remaining = clean_text
+    while remaining:
+        if len(remaining) <= 450:
+            chunks.append(remaining)
+            break
+        cut = max(remaining.rfind(". ", 0, 450), remaining.rfind("\n", 0, 450))
+        if cut < 120:
+            cut = 450
+        else:
+            cut += 1
+        chunks.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+
+    try:
+        translator = MyMemoryTranslator(source="en-GB", target="fr-FR")
+        translated_parts = []
+        for chunk in chunks:
+            translated_parts.append((translator.translate(chunk) or chunk).strip())
+        translated = "\n\n".join(translated_parts).strip()
+        if translated and translated.casefold() != clean_text.casefold():
+            _translation_cache[clean_text] = translated
+            _save_translation_cache()
+            return translated
+    except Exception as exc:
+        print(f"[Traduction recettes] Échec MyMemory : {exc}")
+    return clean_text
+
+
+def get_recipe_instructions_fr(meal_id: str) -> str:
+    """Récupère puis traduit une seule préparation TheMealDB, au moment où elle est ouverte."""
+    detail = fetch_json(
+        "https://www.themealdb.com/api/json/v1/1/lookup.php",
+        params={"i": str(meal_id)},
+    )
+    meal = (detail.get("meals") or [{}])[0]
+    return _translate_instructions_fr((meal.get("strInstructions") or "").strip())
 
 
 def load_fridge_items(user_id: int | None = None):
@@ -342,7 +421,7 @@ def get_usda_foods(query: str, limit: int = None):
                 params={
                     "query": term,
                     "dataType": ["SR Legacy", "Foundation"],
-                    "pageSize": max(5, limit),
+                    "pageSize": 200 if limit is None else max(5, limit),
                     "api_key": USDA_API_KEY,
                 },
             )
@@ -633,7 +712,8 @@ def get_themealdb_recipes(ingredient: str, limit: int = 12):
                 "time": _estimate_recipe_time(d),
                 "difficulty": _estimate_recipe_difficulty(d),
                 "description": _recipe_description_fr(d),
-                "instructions": instructions,
+                "instructions": "",
+                "meal_id": str(d.get("idMeal") or meal_id),
                 "image": d.get("strMealThumb") or meal_info[meal_id].get("strMealThumb") or "",
                 "matched": matched_by_meal.get(meal_id, []),
             }
