@@ -290,6 +290,28 @@ def _extract_usda_nutrient_value(nutrients, names=None, nutrient_ids=None):
     return 0
 
 
+def _extract_usda_energy_kcal(nutrients):
+    """Renvoie l'énergie en kcal (jamais en kJ)."""
+    kcal_by_id, kj = {}, None
+    for n in nutrients:
+        if not isinstance(n, dict) or n.get("value") is None:
+            continue
+        name = (n.get("nutrientName") or "").lower()
+        unit = (n.get("unitName") or "").lower()
+        if "energy" not in name:
+            continue
+        if unit == "kcal":
+            kcal_by_id[n.get("nutrientId")] = n["value"]
+        elif unit == "kj":
+            kj = n["value"]
+    for nutrient_id in (1008, 2047, 2048):  # Energy, puis Atwater general / specific
+        if nutrient_id in kcal_by_id:
+            return kcal_by_id[nutrient_id]
+    if kcal_by_id:
+        return next(iter(kcal_by_id.values()))
+    return round(kj / 4.184, 1) if kj is not None else 0
+
+
 def _normalize_category(category: str):
     """Normalise une catégorie brute provenant d'une API."""
     value = (category or "").strip()
@@ -471,19 +493,12 @@ def get_usda_foods(query: str, limit: int = None):
             candidate = {
                 "name": product_name,
                 "category": _normalize_category(item.get("foodCategory", "Autre")),
-                "calories": _extract_usda_nutrient_value(
-                    nutrients,
-                    ["energy", "energy, total", "energ", "calories"],
-                    [1008],
-                ),
-                "energie": _extract_usda_nutrient_value(
-                    nutrients,
-                    ["energy", "energy, total", "energ", "calories"],
-                    [1008],
-                ),
+                "calories": _extract_usda_energy_kcal(nutrients),
+                "energie": _extract_usda_energy_kcal(nutrients),
+
                 "proteines": _extract_usda_nutrient_value(
                     nutrients,
-                    ["protein", "proteins"],
+                    ["protein", "proteins"],    
                     [1003],
                 ),
                 "glucides": _extract_usda_nutrient_value(
@@ -499,7 +514,7 @@ def get_usda_foods(query: str, limit: int = None):
             }
             foods.append(candidate)
             seen.add(unique_key)
-            if len(foods) >= limit:
+            if limit is not None and len(foods) >= limit:
                 return foods
 
     return foods
