@@ -19,6 +19,7 @@ load_dotenv()
 USDA_API_KEY = os.getenv("USDA_API_KEY")
 fridge_items = []
 
+
 def _translate_instructions_fr(text: str) -> str:
     """Traduit une préparation avec MyMemory. La persistance est gérée dans Supabase."""
     clean_text = (text or "").strip()
