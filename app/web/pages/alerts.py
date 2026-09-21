@@ -7,25 +7,44 @@ from app.web.layout import require_auth, render_page
 router = APIRouter()
 
 
+def _alerts_body():
+    alerts = get_alerts()
+    cards = "".join(
+        f"""
+        <article class="recipe-card">
+            <div class="fridge-card__top">
+                <span class="fridge-card__emoji" aria-hidden="true">🔔</span>
+                <span class="fridge-card__qty">À surveiller</span>
+            </div>
+            <div class="recipe-card__body">
+                <h3 class="recipe-card__title">{alert['title']}</h3>
+                <p class="recipe-card__desc">{alert['message']}</p>
+            </div>
+        </article>
+        """
+        for alert in alerts
+    )
+    return f"""
+        <section class="space-y-6">
+            <div class="overflow-hidden rounded-2xl border border-green-100 bg-white shadow-sm">
+                <div class="bg-gradient-to-br from-green-50 via-white to-emerald-50 px-6 py-7 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900 md:px-8">
+                    <span class="recipe-tag recipe-tag--fridge">🔔 Centre d'alertes</span>
+                    <h1 class="mt-4 text-3xl font-extrabold text-slate-800 dark:text-slate-100">Alertes de votre frigo</h1>
+                    <p class="mt-2 max-w-2xl text-slate-600 dark:text-slate-300">Retrouvez ici les produits à surveiller pour mieux anticiper leur consommation et limiter le gaspillage.</p>
+                    <div class="mt-5 flex flex-wrap gap-2">
+                        <span class="recipe-tag">📋 {len(alerts)} alerte(s)</span>
+                        <a href="/fridge" class="recipe-tag recipe-tag--fridge no-underline">🧊 Voir mon frigo →</a>
+                    </div>
+                </div>
+            </div>
+            <div class="recipe-grid">{cards}</div>
+        </section>
+    """
+
+
 @router.get("/alerts", response_class=HTMLResponse)
 def alerts_page(request: Request):
     redirect = require_auth(request)
     if redirect:
         return redirect
-
-    items = "".join(
-        f"""
-        <li class="rounded-xl border border-amber-100 bg-amber-50 p-4">
-            <strong class="block text-slate-800">{alert['title']}</strong>
-            <div class="mt-1 text-sm text-slate-600">{alert['message']}</div>
-        </li>
-        """
-        for alert in get_alerts()
-    )
-    body = f"""
-        <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
-            <h1 class="mb-5 text-3xl font-bold text-slate-800">Alertes</h1>
-            <ul class="space-y-3">{items}</ul>
-        </div>
-    """
-    return render_page("Alertes", "/alerts", body, request)
+    return render_page("Alertes", "/alerts", _alerts_body(), request)
