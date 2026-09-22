@@ -557,6 +557,103 @@ def get_available_product_names(query: str = "", limit: int = None):
     return [product["name"] for product in products]
 
 
+# Poids moyen utilisé lorsqu'un aliment du frigo est compté à l'unité.
+# Les données USDA sont exprimées pour 100 g : sans cette conversion,
+# "2 pommes" était interprété comme 200 g, "2 œufs" comme 200 g, etc.
+# Ces valeurs sont volontairement des estimations réalistes et peuvent varier
+# selon la taille réelle du produit.
+_PRODUCT_PORTION_GRAMS = {
+    # Fruits
+    "apple": 180, "pomme": 180,
+    "banana": 120, "banane": 120,
+    "orange": 160, "orange": 160,
+    "lemon": 80, "citron": 80,
+    "lime": 70, "citron vert": 70,
+    "pear": 175, "poire": 175,
+    "peach": 150, "peche": 150, "pêche": 150,
+    "plum": 70, "prune": 70,
+    "kiwi": 75,
+    "mango": 200, "mangue": 200,
+    "avocado": 150, "avocat": 150,
+    "strawberry": 15, "fraise": 15,
+    "grape": 5, "raisin": 5,
+    "cherry": 8, "cerise": 8,
+    "pineapple": 900, "ananas": 900,
+    "melon": 800, "watermelon": 3000,
+    # Légumes
+    "tomato": 120, "tomate": 120,
+    "carrot": 60, "carotte": 60,
+    "onion": 110, "oignon": 110,
+    "garlic": 5, "ail": 5,
+    "potato": 170, "pomme de terre": 170,
+    "sweet potato": 180, "patate douce": 180,
+    "cucumber": 300, "concombre": 300,
+    "zucchini": 200, "courgette": 200,
+    "eggplant": 450, "aubergine": 450,
+    "bell pepper": 150, "pepper": 120, "poivron": 150,
+    "mushroom": 18, "champignon": 18,
+    "broccoli": 300, "brocoli": 300,
+    "cauliflower": 700, "chou fleur": 700,
+    "lettuce": 600, "laitue": 600,
+    # Œufs / produits laitiers
+    "egg": 55, "eggs": 55, "œuf": 55, "oeuf": 55,
+    "milk": 240, "lait": 240,
+    "yogurt": 125, "yoghurt": 125, "yaourt": 125,
+    "butter": 15, "beurre": 15,
+    # Viandes / poissons
+    "chicken breast": 150, "chicken": 150, "poulet": 150,
+    "beef": 150, "boeuf": 150, "bœuf": 150,
+    "steak": 180,
+    "pork": 150, "porc": 150,
+    "ham": 40, "jambon": 40,
+    "salmon": 150, "saumon": 150,
+    "tuna": 140, "thon": 140,
+    "cod": 150, "cabillaud": 150,
+    "shrimp": 15, "prawn": 15, "crevette": 15,
+    # Féculents / pain
+    "bread": 40, "pain": 40,
+    "baguette": 250,
+    "roll": 60, "bun": 70,
+    "rice": 100, "riz": 100,
+    "pasta": 100, "pates": 100, "pâtes": 100,
+    # Matières grasses / condiments
+    "olive oil": 15, "huile d'olive": 15,
+    "oil": 15, "huile": 15,
+    "mayonnaise": 15, "mayo": 15,
+    "ketchup": 15, "mustard": 10, "moutarde": 10,
+}
+
+_PRODUCT_CATEGORY_DEFAULT_GRAMS = {
+    "Fruits": 150,
+    "Légumes": 120,
+    "Produits laitiers": 125,
+    "Œufs": 55,
+    "Viandes et volailles": 150,
+    "Poissons et fruits de mer": 150,
+    "Féculents et céréales": 100,
+    "Pain et boulangerie": 50,
+    "Légumineuses": 100,
+    "Matières grasses": 15,
+    "Herbes et épices": 3,
+    "Sauces et condiments": 15,
+    "Produits sucrés": 30,
+    "Farines et pâtisserie": 30,
+    "Fruits à coque et graines": 30,
+    "Boissons": 250,
+    "Autre": 100,
+}
+
+def _estimate_product_portion_grams(name: str, category: str = "Autre") -> float:
+    text = normalize_name(name)
+
+    # Les correspondances les plus spécifiques passent en premier.
+    for product, grams in sorted(_PRODUCT_PORTION_GRAMS.items(), key=lambda pair: len(pair[0]), reverse=True):
+        if normalize_name(product) in text:
+            return float(grams)
+
+    return float(_PRODUCT_CATEGORY_DEFAULT_GRAMS.get(category, 100))
+
+
 def get_food_nutrition(query: str):
     if not query:
         return {
@@ -566,11 +663,17 @@ def get_food_nutrition(query: str):
             "proteines": 0,
             "glucides": 0,
             "lipides": 0,
+            "portion_grams": 100,
+            "estimated_portion": True,
         }
 
     foods = get_usda_foods(query, limit=1)
     if foods:
-        return foods[0]
+        food = foods[0]
+        category = food.get("category") or "Autre"
+        food["portion_grams"] = _estimate_product_portion_grams(query, category)
+        food["estimated_portion"] = True
+        return food
 
     return {
         "name": query,
@@ -579,6 +682,8 @@ def get_food_nutrition(query: str):
         "proteines": 0,
         "glucides": 0,
         "lipides": 0,
+        "portion_grams": _estimate_product_portion_grams(query, "Autre"),
+        "estimated_portion": True,
     }
 
 def _shorten(text: str, max_len: int = 180) -> str:
@@ -759,6 +864,10 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
                 "meal_id": str(d.get("idMeal") or meal_id),
                 "image": d.get("strMealThumb") or fallback.get("strMealThumb") or "",
                 "matched": matched_by_meal.get(meal_id, []),
+                # Détails bruts TheMealDB gardés pour le calcul de la nutrition
+                # réelle de la recette (voir app/web/nutrition_engine.py),
+                # sans avoir à refaire un appel HTTP.
+                "raw_meal": d or fallback,
             }
         )
         seen.add(normalized_name)

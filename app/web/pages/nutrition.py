@@ -81,19 +81,26 @@ def nutrition_page(request: Request):
 
         food = get_food_nutrition(name)
 
-        calories = float(food.get("calories", 0) or 0) * quantity
-        proteins = float(food.get("proteines", 0) or 0) * quantity
-        carbs = float(food.get("glucides", 0) or 0) * quantity
-        fat = float(food.get("lipides", 0) or 0) * quantity
+        # USDA fournit les valeurs nutritionnelles pour 100 g.
+        # La quantité du frigo représente un nombre de produits, pas un nombre
+        # de portions de 100 g. On convertit donc chaque unité vers son poids
+        # moyen estimé avant de multiplier les macros.
+        portion_grams = float(food.get("portion_grams", 100) or 100)
+        factor = (portion_grams * quantity) / 100.0
+
+        calories = float(food.get("calories", 0) or 0) * factor
+        proteins = float(food.get("proteines", 0) or 0) * factor
+        carbs = float(food.get("glucides", 0) or 0) * factor
+        fat = float(food.get("lipides", 0) or 0) * factor
 
         total_calories += calories
         total_proteins += proteins
         total_carbs += carbs
         total_fat += fat
 
-        estimated_label = ""
+        estimated_label = '<span class="text-xs text-amber-600">Poids moyen estimé</span>'
         if food.get("estimated"):
-            estimated_label = '<span class="text-xs text-amber-600">Valeurs estimées</span>'
+            estimated_label += '<span class="text-xs text-amber-600">Valeurs nutritionnelles estimées</span>'
 
         cards.append(f"""
         <article class="recipe-card nutrition-product-card">
@@ -104,7 +111,7 @@ def nutrition_page(request: Request):
             <div class="recipe-card__body">
                 <h3 class="recipe-card__title">{name}</h3>
                 <div class="recipe-card__meta">
-                    <span class="recipe-tag">🍽️ {quantity} portion{'s' if quantity > 1 else ''}</span>
+                    <span class="recipe-tag">⚖️ {quantity} unité{'s' if quantity > 1 else ''} · {round(portion_grams)} g / unité</span>
                     {estimated_label}
                 </div>
                 <div class="nutrition-product-card__stats">

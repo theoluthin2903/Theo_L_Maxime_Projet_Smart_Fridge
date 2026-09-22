@@ -18,6 +18,7 @@ from app.web.data import (
     get_usda_foods,
     load_fridge_items,
 )
+from app.web.nutrition_engine import compute_nutrition_for_recipes_async
 from app.web.layout import require_auth, render_page
 
 router = APIRouter()
@@ -341,7 +342,7 @@ def delete_from_fridge(request: Request, item_id: int = Form(...)):
     return fridge_page(request)
 
 @router.get("/recipes", response_class=HTMLResponse)
-def recipes_page(request: Request):
+async def recipes_page(request: Request):
     # Les GET sont volontairement accessibles aux visiteurs dans ce projet.
     # On contrôle donc explicitement la connexion ici : un visiteur ne doit
     # jamais réutiliser le contenu du frigo global du dernier utilisateur.
@@ -365,6 +366,22 @@ def recipes_page(request: Request):
     ingredient = get_fridge_search_query()
     recipe_data = get_themealdb_recipes(ingredient, limit=12) if ingredient else []
 
+    # Pipeline asynchrone (httpx + asyncio.gather) : calcule les calories et
+    # macros réelles de chaque recette en interrogeant l'USDA pour tous ses
+    # ingrédients, pour toutes les recettes, en parallèle. Voir
+    # app/web/nutrition_engine.py. Si l'USDA est injoignable, on affiche
+    # simplement les recettes sans nutrition plutôt que de casser la page.
+    if recipe_data:
+        try:
+            nutrition_results = await compute_nutrition_for_recipes_async(
+                [recipe.get("raw_meal") or {} for recipe in recipe_data]
+            )
+        except Exception as exc:
+            print(f"[Recettes] Calcul nutritionnel indisponible : {exc}")
+            nutrition_results = [None] * len(recipe_data)
+        for recipe, nutrition in zip(recipe_data, nutrition_results):
+            recipe["nutrition"] = nutrition
+
     def recipe_card(recipe):
         image = (
             f'<img class="recipe-card__img" src="{escape(recipe["image"])}/preview" alt="{escape(recipe["name"])}" loading="lazy">'
@@ -375,6 +392,21 @@ def recipes_page(request: Request):
             f'<span class="recipe-tag recipe-tag--fridge">🧊 {escape(name)}</span>'
             for name in recipe.get("matched", [])
         )
+        nutrition = recipe.get("nutrition")
+        nutrition_html = ""
+        if nutrition:
+            estimated_note = (
+                ' <span class="recipe-tag">≈ estimé</span>' if nutrition.get("estimated") else ""
+            )
+            nutrition_html = f"""
+                <div class="recipe-card__meta">
+                    <span class="recipe-tag recipe-tag--fridge">🔥 {nutrition['calories']} kcal</span>
+                    <span class="recipe-tag">P {nutrition['proteines']} g</span>
+                    <span class="recipe-tag">G {nutrition['glucides']} g</span>
+                    <span class="recipe-tag">L {nutrition['lipides']} g</span>
+                    {estimated_note}
+                </div>
+            """
         meal_id = escape(str(recipe.get("meal_id") or ""), quote=True)
         details = (
             f"""<details class="recipe-card__details recipe-preparation" data-meal-id="{meal_id}">
@@ -394,6 +426,7 @@ def recipes_page(request: Request):
                     <span class="recipe-tag">👍 {escape(recipe['difficulty'])}</span>
                 </div>
                 <div class="recipe-card__meta">{tags}</div>
+                {nutrition_html}
                 <p class="recipe-card__desc">{escape(recipe['description'])}</p>
                 {details}
             </div>
