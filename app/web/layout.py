@@ -60,7 +60,6 @@ def nav(active: str, is_admin: bool = False) -> str:
     links = [
         ("/", "Accueil"),
         ("/fridge", "Frigo"),
-        ("/products", "Produits"),
         ("/recipes", "Recettes"),
         ("/nutrition", "Nutrition"),
         ("/alerts", "Alertes"),

@@ -277,20 +277,6 @@ def fetch_json(url: str, params: dict | None = None, timeout: int = 15):
     response.raise_for_status()
     return response.json()
 
-
-def _extract_nutrient_value(nutrients, names):
-    normalized = {
-        (n.get("nutrientName", "") or "").strip().lower().replace("-", " "): n.get("value")
-        for n in nutrients
-        if isinstance(n, dict)
-    }
-    for candidate in names:
-        exact = normalized.get(candidate.strip().lower())
-        if exact is not None:
-            return exact
-    return 0
-
-
 def _extract_usda_nutrient_value(nutrients, names=None, nutrient_ids=None):
     names = names or []
     nutrient_ids = nutrient_ids or []
