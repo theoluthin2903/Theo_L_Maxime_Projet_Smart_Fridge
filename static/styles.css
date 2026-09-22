@@ -848,3 +848,14 @@ html.dark .recipe-tag--danger{background:rgba(239,68,68,.18);color:#fca5a5}
 html.dark .nutrition-product-card__stats>div{background:#0f172a}
 html.dark .nutrition-product-card__stats span{color:#94a3b8}
 html.dark .nutrition-product-card__stats strong{color:#f1f5f9}
+/* ===== Carte Profil (page d'accueil) ===== */
+.profile-card__top{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f0fdf4,#dcfce7)}
+.profile-card__emoji{font-size:2.2rem;line-height:1}
+.profile-card__qty{padding:4px 12px;border-radius:999px;background:#fff;color:#166534;font-weight:800;font-size:.9rem;box-shadow:0 1px 3px rgba(22,101,52,.15)}
+.profile-card__body{display:flex;flex-direction:column;gap:10px;padding:16px 18px 18px}
+.profile-card__title{margin:0;font-size:1.1rem;font-weight:800;line-height:1.3;color:#0f172a}
+.profile-card__desc{margin:0;font-size:.9rem;line-height:1.55;color:#475569;display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+html.dark .profile-card__top{background:linear-gradient(135deg,rgba(34,197,94,.14),rgba(34,197,94,.05))}
+html.dark .profile-card__qty{background:#0f172a;color:#86efac;box-shadow:none}
+html.dark .profile-card__title{color:#f1f5f9}
+html.dark .profile-card__desc{color:#cbd5e1}

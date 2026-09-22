@@ -55,6 +55,10 @@ def home_page(request: Request):
                         <div class="fridge-card__top"><span class="fridge-card__emoji">🔔</span><span class="fridge-card__qty">Alertes</span></div>
                         <div class="recipe-card__body"><h3 class="recipe-card__title">Surveiller les alertes</h3><p class="recipe-card__desc">Repérez rapidement les produits à consommer et les informations importantes de votre frigo.</p><span class="font-bold text-green-700 dark:text-green-400">Voir les alertes →</span></div>
                     </a>
+                    <a href="/profile" class="recipe-card group no-underline">
+                        <div class="profile-card__top"><span class="profile-card__emoji">👤</span><span class="profile-card__qty">Profil</span></div>
+                        <div class="profile-card__body"><h3 class="profile-card__title">Voir mon profil</h3><p class="profile-card__desc">Accédez a votre profil pour inspecter et/ou remplir vos informations personnelles.</p><span class="font-bold text-green-700 dark:text-green-400">Voir le profil →</span></div>
+                    </a>
                 </div>
             </div>
         </section>

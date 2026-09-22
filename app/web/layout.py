@@ -212,7 +212,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                     }}
                 }}
             </script>
-            <link rel="stylesheet" href="/static/styles.css?v=5" />
+            <link rel="stylesheet" href="/static/styles.css?v=6" />
             <style>
                 /* Visiteur : les formulaires de modification sont visibles mais inutilisables. */
                 .visitor-mode form[method="post"] input,
