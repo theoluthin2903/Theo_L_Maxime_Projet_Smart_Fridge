@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import HTTPException
 
@@ -19,6 +20,17 @@ from app.web.pages.profile import router as profile_pages_router
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Smart Fridge & Nutrition Coach")
+
+# CORS : à restreindre à votre propre domaine en production. "*" convient
+# pour un projet d'école consommé depuis /docs ou un front séparé en local.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,  # False obligatoire tant que allow_origins=["*"]
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(auth_router)
 app.include_router(profile_router)
