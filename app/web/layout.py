@@ -211,7 +211,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                     }}
                 }}
             </script>
-            <link rel="stylesheet" href="/static/styles.css?v=6" />
+            <link rel="stylesheet" href="/static/styles.css?v=7" />
             <style>
                 /* Visiteur : les formulaires de modification sont visibles mais inutilisables. */
                 .visitor-mode form[method="post"] input,
@@ -231,14 +231,21 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
         <body class="bg-green-50 text-slate-800 antialiased transition-colors duration-200 dark:bg-slate-900 dark:text-slate-100 {visitor_class}">
             <div class="flex min-h-screen flex-col md:flex-row">
                 <aside class="w-full bg-gradient-to-b from-green-800 to-green-600 p-6 text-white transition-colors duration-200 dark:from-slate-800 dark:to-slate-950 md:w-64">
-                    <div class="mb-8 text-2xl font-black">Smart Fridge</div>
-                    <nav class="flex flex-col gap-3">
-                        {nav(active, is_admin)}
-                    </nav>
-                    {theme_toggle_button}
-                    {welcome_block}
-                    {login_button}
-                    {logout_button}
+                    <div class="mobile-header-row">
+                        <div class="mb-8 text-2xl font-black mobile-brand">Smart Fridge</div>
+                        <button type="button" id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Ouvrir le menu" aria-expanded="false" onclick="toggleMobileMenu()">
+                            <span></span><span></span><span></span>
+                        </button>
+                    </div>
+                    <div id="mobile-menu" class="mobile-menu">
+                        <nav class="flex flex-col gap-3">
+                            {nav(active, is_admin)}
+                        </nav>
+                        {theme_toggle_button}
+                        {welcome_block}
+                        {login_button}
+                        {logout_button}
+                    </div>
                 </aside>
                 <main class="flex-1 p-6 md:p-8">
                     <div class="space-y-6">
@@ -258,7 +265,30 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                         icon.textContent = document.documentElement.classList.contains('dark') ? '🌙' : '☀️';
                     }}
                 }}
-                document.addEventListener('DOMContentLoaded', updateThemeIcon);
+                function toggleMobileMenu() {{
+                    var menu = document.getElementById('mobile-menu');
+                    var button = document.getElementById('mobile-menu-toggle');
+                    if (!menu || !button) return;
+                    var opened = menu.classList.toggle('is-open');
+                    button.classList.toggle('is-open', opened);
+                    button.setAttribute('aria-expanded', opened ? 'true' : 'false');
+                }}
+                document.addEventListener('DOMContentLoaded', function () {{
+                    updateThemeIcon();
+                    document.querySelectorAll('#mobile-menu nav a').forEach(function (link) {{
+                        link.addEventListener('click', function () {{
+                            if (window.innerWidth < 768) {{
+                                var menu = document.getElementById('mobile-menu');
+                                var button = document.getElementById('mobile-menu-toggle');
+                                if (menu) menu.classList.remove('is-open');
+                                if (button) {{
+                                    button.classList.remove('is-open');
+                                    button.setAttribute('aria-expanded', 'false');
+                                }}
+                            }}
+                        }});
+                    }});
+                }});
             </script>
         </body>
         </html>
