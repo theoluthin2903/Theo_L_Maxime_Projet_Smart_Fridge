@@ -1,7 +1,8 @@
+import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import date, datetime
 
 import requests
 from dotenv import load_dotenv
@@ -14,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import asc
 
 from app.db.database import SessionLocal
-from app.db.models import FridgeItemDB, RecipeTranslationDB
+from app.db.models import DailyLogDB, FridgeItemDB, RecipeTranslationDB
 
 load_dotenv()
 
@@ -196,6 +197,57 @@ def delete_fridge_item(item_id: int, user_id: int | None = None):
             db.commit()
     load_fridge_items(user_id)
     return True
+
+
+def clear_fridge_items(user_id: int):
+    """Supprime tous les produits du frigo d'un utilisateur (fin de journée)."""
+    with SessionLocal() as db:
+        db.query(FridgeItemDB).filter(FridgeItemDB.user_id == int(user_id)).delete()
+        db.commit()
+    load_fridge_items(user_id)
+    return True
+
+
+def save_daily_log_and_clear_fridge(user_id: int):
+    """Sauvegarde l'état du frigo et de la nutrition du jour dans Supabase,
+    puis vide le frigo de l'utilisateur (ce qui remet la nutrition à zéro,
+    celle-ci étant calculée à la volée à partir du contenu du frigo)."""
+    items = load_fridge_items(int(user_id))
+
+    total_calories = total_proteines = total_glucides = total_lipides = 0.0
+    for item in items:
+        name = (item.get("name") or "").strip()
+        quantity = int(item.get("quantity") or 1)
+        if not name:
+            continue
+
+        food = get_food_nutrition(name)
+        portion_grams = float(food.get("portion_grams", 100) or 100)
+        factor = (portion_grams * quantity) / 100.0
+
+        total_calories += float(food.get("calories", 0) or 0) * factor
+        total_proteines += float(food.get("proteines", 0) or 0) * factor
+        total_glucides += float(food.get("glucides", 0) or 0) * factor
+        total_lipides += float(food.get("lipides", 0) or 0) * factor
+
+    with SessionLocal() as db:
+        log = DailyLogDB(
+            user_id=int(user_id),
+            log_date=date.today().isoformat(),
+            fridge_snapshot=json.dumps(items, ensure_ascii=False),
+            total_calories=round(total_calories),
+            total_proteines=round(total_proteines),
+            total_glucides=round(total_glucides),
+            total_lipides=round(total_lipides),
+            created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+        log_id = log.id
+
+    clear_fridge_items(user_id)
+    return log_id
 
 
 class IngredientQuantity(BaseModel):

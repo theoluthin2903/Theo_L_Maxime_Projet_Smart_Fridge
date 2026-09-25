@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.db.database import SessionLocal
 from app.db.models import AdminLogDB, UserDB
@@ -17,6 +17,7 @@ from app.web.data import (
     get_recipe_instructions_fr,
     get_usda_foods,
     load_fridge_items,
+    save_daily_log_and_clear_fridge,
 )
 from app.web.nutrition_engine import compute_nutrition_for_recipes_async
 from app.web.layout import require_auth, render_page
@@ -340,6 +341,33 @@ def delete_from_fridge(request: Request, item_id: int = Form(...)):
     if user_id is not None:
         delete_fridge_item(item_id, int(user_id))
     return fridge_page(request)
+
+
+@router.post("/fridge/next-day")
+def next_day(request: Request):
+    """Sauvegarde le frigo + la nutrition du jour dans Supabase, puis vide
+    le frigo (la nutrition, calculée à partir du frigo, repasse donc à zéro)."""
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+
+    user_id = get_user_id_from_cookie(request)
+    if user_id is not None:
+        user_id_int = int(user_id)
+        save_daily_log_and_clear_fridge(user_id_int)
+
+        with SessionLocal() as db:
+            db.add(AdminLogDB(
+                admin_user_id=user_id_int,
+                action="Passage à la journée suivante",
+                target=None,
+                details="Frigo et nutrition sauvegardés puis réinitialisés",
+                created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ))
+            db.commit()
+
+    return RedirectResponse(url="/?next_day=1", status_code=303)
+
 
 @router.get("/recipes", response_class=HTMLResponse)
 async def recipes_page(request: Request):
