@@ -27,7 +27,7 @@ def home_page(request: Request):
             new_date_label = new_date
         date_part = f" Nous sommes maintenant le <strong>{new_date_label}</strong>." if new_date_label else ""
         expired_part = (
-            f" {expired} produit(s) retiré(s) — le frigo a été vidé pour la nouvelle journée." if expired and expired != "0" else ""
+            f" {expired} produit(s) périmé(s) retiré(s) du frigo." if expired and expired != "0" else ""
         )
         next_day_notice = f"""
             <div class="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-semibold text-green-800 dark:border-green-700 dark:bg-green-900/30 dark:text-green-200">
@@ -46,7 +46,7 @@ def home_page(request: Request):
                         <div class="mt-6 flex flex-wrap gap-3">
                             <a href="/fridge" class="rounded-xl bg-green-700 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-green-800">🧊 Ouvrir mon frigo</a>
                             <a href="/recipes" class="rounded-xl border border-green-200 bg-white px-5 py-3 font-bold text-green-700 shadow-sm transition hover:bg-green-50 dark:border-slate-600 dark:bg-slate-800 dark:text-green-300 dark:hover:bg-slate-700">🍳 Voir les recettes</a>
-                            <form method="post" action="/fridge/next-day" onsubmit="return confirm('Passer à la journée suivante ? Le frigo et la nutrition du jour seront sauvegardés dans Supabase, la date avancera d’un jour et le frigo sera entièrement vidé.');">
+                            <form method="post" action="/fridge/next-day" onsubmit="return confirm('Passer à la journée suivante ? Le frigo et la nutrition du jour seront sauvegardés dans Supabase, la date avancera d’un jour et les produits périmés seront retirés du frigo.');">
                                 <button type="submit" class="rounded-xl border border-amber-200 bg-white px-5 py-3 font-bold text-amber-700 shadow-sm transition hover:bg-amber-50 dark:border-slate-600 dark:bg-slate-800 dark:text-amber-300 dark:hover:bg-slate-700">⏭️ Passer à la journée suivante</button>
                             </form>
                         </div>

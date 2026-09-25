@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import asc
 
 from app.db.database import SessionLocal
-from app.db.models import AppDateDB, DailyLogDB, FridgeItemDB, RecipeLeftoverDB, RecipeTranslationDB
+from app.db.models import AppDateDB, DailyLogDB, FridgeItemDB, RecipeTranslationDB
 
 load_dotenv()
 
@@ -228,11 +228,13 @@ def advance_to_next_day(user_id: int):
     """Fait réellement passer l'application au jour suivant pour cet utilisateur :
     1. Sauvegarde le frigo + la nutrition du jour en cours dans Supabase (daily_logs),
        avec log_date = date simulée du jour qui se termine.
-    2. Vide entièrement le frigo (nouvelle journée = frigo remis à zéro), ce qui
-       remet aussi la nutrition à zéro puisqu'elle est calculée à partir du frigo.
-    3. Avance la date simulée de l'application d'un jour (utilisée ensuite comme
+    2. Avance la date simulée de l'application d'un jour (utilisée ensuite comme
        date par défaut dans le menu déroulant des dates d'expiration).
-    Renvoie un dict avec la nouvelle date, le nombre de produits retirés du frigo
+    3. Retire du frigo uniquement les produits dont la date d'expiration est
+       dépassée par cette nouvelle date (les produits encore bons restent).
+    La nutrition, calculée à partir du frigo restant, se met donc à jour
+    automatiquement.
+    Renvoie un dict avec la nouvelle date, le nombre de produits périmés retirés
     et la date de la journée qui vient d'être enregistrée.
     """
     user_id = int(user_id)
@@ -271,13 +273,20 @@ def advance_to_next_day(user_id: int):
 
     new_date = current_date + timedelta(days=1)
 
-    cleared_count = 0
+    expired_count = 0
     with SessionLocal() as db:
-        cleared_count = (
-            db.query(FridgeItemDB)
-            .filter(FridgeItemDB.user_id == user_id)
-            .delete()
-        )
+        fridge_rows = db.query(FridgeItemDB).filter(FridgeItemDB.user_id == user_id).all()
+        for row in fridge_rows:
+            expiration = (row.expiration_date or "").strip()
+            if not expiration:
+                continue
+            try:
+                expiration_date = date.fromisoformat(expiration)
+            except ValueError:
+                continue
+            if expiration_date < new_date:
+                db.delete(row)
+                expired_count += 1
         db.commit()
 
     with SessionLocal() as db:
@@ -293,7 +302,7 @@ def advance_to_next_day(user_id: int):
 
     return {
         "new_date": new_date,
-        "expired_removed": cleared_count,
+        "expired_removed": expired_count,
         "log_date": current_date,
     }
 
@@ -976,29 +985,18 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
     return result
 
 
-def get_alerts(user_id: int | None = None):
+def get_alerts():
     alerts = []
-    items = load_fridge_items(user_id) if user_id is not None else fridge_items
-    for item in items:
+    for item in fridge_items:
         if item.get("expiration_date"):
-            alerts.append({
-                "title": f"{item['name']} à consommer",
-                "message": f"Produit dans le frigo jusqu’au {item['expiration_date']}.",
-            })
-
-    if user_id is not None:
-        with SessionLocal() as db:
-            leftovers = db.query(RecipeLeftoverDB).filter(
-                RecipeLeftoverDB.user_id == int(user_id), RecipeLeftoverDB.remaining_percent > 0
-            ).all()
-        for leftover in leftovers:
-            alerts.append({
-                "title": f"Reste de {leftover.recipe_name}",
-                "message": f"Il reste {round(leftover.remaining_percent)}% de la recette (environ {round(leftover.calories_remaining)} kcal) dans votre frigo.",
-            })
-
+            alerts.append(
+                {
+                    "title": f"{item['name']} à consommer",
+                    "message": f"Produit dans le frigo jusqu’au {item['expiration_date']}.",
+                }
+            )
     if not alerts:
-        alerts.append({"title": "Aucune alerte", "message": "Aucun produit ou reste de recette à surveiller pour le moment."})
+        alerts.append({"title": "Frigo vide", "message": "Ajoutez des produits pour recevoir des alertes."})
     return alerts
 
 
