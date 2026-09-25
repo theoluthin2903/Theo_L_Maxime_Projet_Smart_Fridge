@@ -25,6 +25,8 @@ fridge_items = []
 # Cache court pour éviter de rappeler TheMealDB à chaque navigation Frigo ↔ Recettes.
 _RECIPE_CACHE: dict[str, tuple[float, list[dict]]] = {}
 _RECIPE_CACHE_TTL = 1800  # 30 minutes
+
+# Catalogue du formulaire Frigo : TheMealDB change très peu, on le garde 1 h.
 _PRODUCT_CACHE: tuple[float, list[dict]] | None = None
 _PRODUCT_CACHE_TTL = 3600
 

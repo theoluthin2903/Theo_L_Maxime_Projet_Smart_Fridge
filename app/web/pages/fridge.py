@@ -559,4 +559,4 @@ def alerts_page(request: Request):
     redirect = require_auth(request)
     if redirect:
         return redirect
-    return render_page("Alertes", "/alerts", _alerts_body(), request)   
+    return render_page("Alertes", "/alerts", _alerts_body(), request)
