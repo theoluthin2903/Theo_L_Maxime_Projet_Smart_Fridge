@@ -3,12 +3,13 @@ from fastapi.responses import HTMLResponse
 
 from app.web.data import get_alerts
 from app.web.layout import require_auth, render_page
+from app.web.pages.fridge import get_user_id_from_cookie
 
 router = APIRouter()
 
 
-def _alerts_body():
-    alerts = get_alerts()
+def _alerts_body(user_id=None):
+    alerts = get_alerts(user_id)
     cards = "".join(
         f"""
         <article class="recipe-card">
@@ -48,4 +49,4 @@ def alerts_page(request: Request):
     redirect = require_auth(request)
     if redirect:
         return redirect
-    return render_page("Alertes", "/alerts", _alerts_body(), request)
+    return render_page("Alertes", "/alerts", _alerts_body(get_user_id_from_cookie(request)), request)
