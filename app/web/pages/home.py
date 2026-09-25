@@ -39,14 +39,6 @@ def home_page(request: Request):
                     </div>
                 </div>
                 <div class="recipe-grid">
-                    <a href="/fridge" class="recipe-card group no-underline">
-                        <div class="fridge-card__top"><span class="fridge-card__emoji">🧊</span><span class="fridge-card__qty">Frigo</span></div>
-                        <div class="recipe-card__body"><h3 class="recipe-card__title">Gérer mon frigo</h3><p class="recipe-card__desc">Ajoutez vos aliments, suivez les quantités et gardez un œil sur les dates de péremption.</p><span class="font-bold text-green-700 dark:text-green-400">Voir mes produits →</span></div>
-                    </a>
-                    <a href="/recipes" class="recipe-card group no-underline">
-                        <div class="fridge-card__top"><span class="fridge-card__emoji">🍳</span><span class="fridge-card__qty">Recettes</span></div>
-                        <div class="recipe-card__body"><h3 class="recipe-card__title">Trouver une recette</h3><p class="recipe-card__desc">Découvrez des idées de repas adaptées aux ingrédients disponibles dans votre frigo.</p><span class="font-bold text-green-700 dark:text-green-400">Découvrir les recettes →</span></div>
-                    </a>
                     <a href="/nutrition" class="recipe-card group no-underline">
                         <div class="fridge-card__top"><span class="fridge-card__emoji">🥗</span><span class="fridge-card__qty">Nutrition</span></div>
                         <div class="recipe-card__body"><h3 class="recipe-card__title">Suivre ma nutrition</h3><p class="recipe-card__desc">Consultez les informations nutritionnelles et suivez plus facilement votre alimentation.</p><span class="font-bold text-green-700 dark:text-green-400">Voir la nutrition →</span></div>
