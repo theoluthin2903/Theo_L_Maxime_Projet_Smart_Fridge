@@ -31,6 +31,19 @@ class FridgeItemDB(Base):
     category = Column(String, default="")
     notes = Column(String, default="")
 
+class DailyLogDB(Base):
+    __tablename__ = "daily_logs"
+ 
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    log_date = Column(String, nullable=False, index=True)
+    fridge_snapshot = Column(Text, nullable=False, default="[]")
+    total_calories = Column(Float, default=0)
+    total_proteines = Column(Float, default=0)
+    total_glucides = Column(Float, default=0)
+    total_lipides = Column(Float, default=0)
+    created_at = Column(String, nullable=False)
+
 
 class RecipeTranslationDB(Base):
     __tablename__ = "recipe_translations"

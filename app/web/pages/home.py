@@ -15,7 +15,15 @@ def home_page(request: Request):
     if redirect:
         return redirect
 
-    body = """
+    next_day_notice = ""
+    if request.query_params.get("next_day") == "1":
+        next_day_notice = """
+            <div class="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-semibold text-green-800 dark:border-green-700 dark:bg-green-900/30 dark:text-green-200">
+                ✅ Journée enregistrée ! Votre frigo et votre nutrition ont été remis à zéro.
+            </div>
+        """
+
+    body = f"""
         <section class="space-y-6">
             <div class="overflow-hidden rounded-2xl border border-green-100 bg-white shadow-sm">
                 <div class="bg-gradient-to-br from-green-50 via-white to-emerald-50 px-6 py-8 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900 md:px-8">
@@ -26,7 +34,11 @@ def home_page(request: Request):
                         <div class="mt-6 flex flex-wrap gap-3">
                             <a href="/fridge" class="rounded-xl bg-green-700 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-green-800">🧊 Ouvrir mon frigo</a>
                             <a href="/recipes" class="rounded-xl border border-green-200 bg-white px-5 py-3 font-bold text-green-700 shadow-sm transition hover:bg-green-50 dark:border-slate-600 dark:bg-slate-800 dark:text-green-300 dark:hover:bg-slate-700">🍳 Voir les recettes</a>
+                            <form method="post" action="/fridge/next-day" onsubmit="return confirm('Passer à la journée suivante ? Le frigo et la nutrition actuels seront sauvegardés puis remis à zéro.');">
+                                <button type="submit" class="rounded-xl border border-amber-200 bg-white px-5 py-3 font-bold text-amber-700 shadow-sm transition hover:bg-amber-50 dark:border-slate-600 dark:bg-slate-800 dark:text-amber-300 dark:hover:bg-slate-700">⏭️ Passer à la journée suivante</button>
+                            </form>
                         </div>
+                        {next_day_notice}
                     </div>
                 </div>
             </div>
