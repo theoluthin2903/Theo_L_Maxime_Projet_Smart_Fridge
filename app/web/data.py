@@ -2,7 +2,7 @@ import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import requests
 from dotenv import load_dotenv
@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import asc
 
 from app.db.database import SessionLocal
-from app.db.models import DailyLogDB, FridgeItemDB, RecipeTranslationDB
+from app.db.models import AppDateDB, DailyLogDB, FridgeItemDB, RecipeTranslationDB
 
 load_dotenv()
 
@@ -29,11 +29,6 @@ _RECIPE_CACHE_TTL = 1800  # 30 minutes
 # Catalogue du formulaire Frigo : TheMealDB change très peu, on le garde 1 h.
 _PRODUCT_CACHE: tuple[float, list[dict]] | None = None
 _PRODUCT_CACHE_TTL = 3600
-
-# Cache très court du frigo : évite une requête Supabase à chaque clic de navigation.
-# Il est invalidé immédiatement après un ajout/suppression.
-_FRIDGE_CACHE: dict[int, tuple[float, list[dict]]] = {}
-_FRIDGE_CACHE_TTL = 30
 
 def _translate_instructions_fr(text: str) -> str:
     """Traduit une préparation avec MyMemory. La persistance est gérée dans Supabase."""
@@ -132,22 +127,13 @@ def get_recipe_instructions_fr(meal_id: str) -> str:
     return translated
 
 
-def load_fridge_items(user_id: int | None = None, force: bool = False):
+def load_fridge_items(user_id: int | None = None):
     global fridge_items
-    cache_user_id = int(user_id) if user_id is not None else None
-    now = time.monotonic()
-
-    if cache_user_id is not None and not force:
-        cached = _FRIDGE_CACHE.get(cache_user_id)
-        if cached and now - cached[0] < _FRIDGE_CACHE_TTL:
-            fridge_items = [dict(item) for item in cached[1]]
-            return fridge_items
-
     with SessionLocal() as db:
         query = db.query(FridgeItemDB)
-        if cache_user_id is not None:
-            query = query.filter(FridgeItemDB.user_id == cache_user_id)
-        loaded = [
+        if user_id is not None:
+            query = query.filter(FridgeItemDB.user_id == int(user_id))
+        fridge_items = [
             {
                 "id": item.id,
                 "user_id": item.user_id,
@@ -159,10 +145,6 @@ def load_fridge_items(user_id: int | None = None, force: bool = False):
             }
             for item in query.order_by(asc(FridgeItemDB.id)).all()
         ]
-
-    fridge_items = loaded
-    if cache_user_id is not None:
-        _FRIDGE_CACHE[cache_user_id] = (now, [dict(item) for item in loaded])
     return fridge_items
 
 
@@ -200,8 +182,7 @@ def add_fridge_item(
             "notes": item.notes or "",
         }
 
-    _FRIDGE_CACHE.pop(int(user_id), None)
-    load_fridge_items(user_id, force=True)
+    load_fridge_items(user_id)
     return created
 
 
@@ -214,14 +195,28 @@ def delete_fridge_item(item_id: int, user_id: int | None = None):
         if deleted:
             db.delete(deleted)
             db.commit()
-    if user_id is not None:
-        _FRIDGE_CACHE.pop(int(user_id), None)
-    load_fridge_items(user_id, force=True)
+    load_fridge_items(user_id)
     return True
 
 
+def get_current_app_date(user_id: int) -> date:
+    """Renvoie la date 'actuelle' simulée de l'application pour cet utilisateur
+    (initialisée à la vraie date du jour lors du premier appel)."""
+    with SessionLocal() as db:
+        row = db.query(AppDateDB).filter(AppDateDB.user_id == int(user_id)).first()
+        if row is None:
+            row = AppDateDB(user_id=int(user_id), current_date=date.today().isoformat())
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+        try:
+            return date.fromisoformat(row.current_date)
+        except ValueError:
+            return date.today()
+
+
 def clear_fridge_items(user_id: int):
-    """Supprime tous les produits du frigo d'un utilisateur (fin de journée)."""
+    """Supprime tous les produits du frigo d'un utilisateur."""
     with SessionLocal() as db:
         db.query(FridgeItemDB).filter(FridgeItemDB.user_id == int(user_id)).delete()
         db.commit()
@@ -229,11 +224,20 @@ def clear_fridge_items(user_id: int):
     return True
 
 
-def save_daily_log_and_clear_fridge(user_id: int):
-    """Sauvegarde l'état du frigo et de la nutrition du jour dans Supabase,
-    puis vide le frigo de l'utilisateur (ce qui remet la nutrition à zéro,
-    celle-ci étant calculée à la volée à partir du contenu du frigo)."""
-    items = load_fridge_items(int(user_id))
+def advance_to_next_day(user_id: int):
+    """Fait réellement passer l'application au jour suivant pour cet utilisateur :
+    1. Sauvegarde le frigo + la nutrition du jour en cours dans Supabase (daily_logs),
+       avec log_date = date simulée du jour qui se termine.
+    2. Vide entièrement le frigo (nouvelle journée = frigo remis à zéro), ce qui
+       remet aussi la nutrition à zéro puisqu'elle est calculée à partir du frigo.
+    3. Avance la date simulée de l'application d'un jour (utilisée ensuite comme
+       date par défaut dans le menu déroulant des dates d'expiration).
+    Renvoie un dict avec la nouvelle date, le nombre de produits retirés du frigo
+    et la date de la journée qui vient d'être enregistrée.
+    """
+    user_id = int(user_id)
+    current_date = get_current_app_date(user_id)
+    items = load_fridge_items(user_id)
 
     total_calories = total_proteines = total_glucides = total_lipides = 0.0
     for item in items:
@@ -253,8 +257,8 @@ def save_daily_log_and_clear_fridge(user_id: int):
 
     with SessionLocal() as db:
         log = DailyLogDB(
-            user_id=int(user_id),
-            log_date=date.today().isoformat(),
+            user_id=user_id,
+            log_date=current_date.isoformat(),
             fridge_snapshot=json.dumps(items, ensure_ascii=False),
             total_calories=round(total_calories),
             total_proteines=round(total_proteines),
@@ -264,11 +268,34 @@ def save_daily_log_and_clear_fridge(user_id: int):
         )
         db.add(log)
         db.commit()
-        db.refresh(log)
-        log_id = log.id
 
-    clear_fridge_items(user_id)
-    return log_id
+    new_date = current_date + timedelta(days=1)
+
+    cleared_count = 0
+    with SessionLocal() as db:
+        cleared_count = (
+            db.query(FridgeItemDB)
+            .filter(FridgeItemDB.user_id == user_id)
+            .delete()
+        )
+        db.commit()
+
+    with SessionLocal() as db:
+        date_row = db.query(AppDateDB).filter(AppDateDB.user_id == user_id).first()
+        if date_row is None:
+            date_row = AppDateDB(user_id=user_id, current_date=new_date.isoformat())
+            db.add(date_row)
+        else:
+            date_row.current_date = new_date.isoformat()
+        db.commit()
+
+    load_fridge_items(user_id)
+
+    return {
+        "new_date": new_date,
+        "expired_removed": cleared_count,
+        "log_date": current_date,
+    }
 
 
 class IngredientQuantity(BaseModel):

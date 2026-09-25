@@ -10,14 +10,15 @@ from app.db.models import AdminLogDB, UserDB
 from app.web.data import (
     add_fridge_item,
     delete_fridge_item,
+    advance_to_next_day,
     get_available_products,
+    get_current_app_date,
     get_fridge_search_query,
     get_alerts,
     get_themealdb_recipes,
     get_recipe_instructions_fr,
     get_usda_foods,
     load_fridge_items,
-    save_daily_log_and_clear_fridge,
 )
 from app.web.nutrition_engine import compute_nutrition_for_recipes_async
 from app.web.layout import require_auth, render_page
@@ -44,6 +45,7 @@ def fridge_page(request: Request):
     user_id = get_user_id_from_cookie(request)
     is_logged_in = user_id is not None
     items = load_fridge_items(user_id) if is_logged_in else []
+    app_today = get_current_app_date(user_id) if is_logged_in else date.today()
     def category_emoji(category: str) -> str:
         text = (category or "").lower()
         for keywords, emoji in [
@@ -65,7 +67,7 @@ def fridge_page(request: Request):
         if not expiration:
             return '<span class="recipe-tag">📅 Pas de date</span>'
         try:
-            days_left = (date.fromisoformat(expiration) - date.today()).days
+            days_left = (date.fromisoformat(expiration) - app_today).days
         except ValueError:
             return f'<span class="recipe-tag">📅 {escape(expiration)}</span>'
         if days_left < 0:
@@ -149,7 +151,7 @@ def fridge_page(request: Request):
         for quantity in range(1, 21)
     )
 
-    today = date.today()
+    today = app_today
     expiration_options = [("", "Pas de date d’expiration")]
     for offset in range(0, 365):
         expiration_day = today + timedelta(days=offset)
@@ -345,8 +347,10 @@ def delete_from_fridge(request: Request, item_id: int = Form(...)):
 
 @router.post("/fridge/next-day")
 def next_day(request: Request):
-    """Sauvegarde le frigo + la nutrition du jour dans Supabase, puis vide
-    le frigo (la nutrition, calculée à partir du frigo, repasse donc à zéro)."""
+    """Sauvegarde le frigo + la nutrition du jour en cours dans Supabase, puis
+    fait réellement avancer l'application au jour suivant : la date simulée
+    est incrémentée de 1 (le menu déroulant des dates d'expiration en tiendra
+    compte) et le frigo est entièrement vidé pour la nouvelle journée."""
     redirect = require_auth(request)
     if redirect:
         return redirect
@@ -354,17 +358,28 @@ def next_day(request: Request):
     user_id = get_user_id_from_cookie(request)
     if user_id is not None:
         user_id_int = int(user_id)
-        save_daily_log_and_clear_fridge(user_id_int)
+        result = advance_to_next_day(user_id_int)
+        new_date_str = result["new_date"].isoformat()
+        expired = result["expired_removed"]
 
         with SessionLocal() as db:
             db.add(AdminLogDB(
                 admin_user_id=user_id_int,
                 action="Passage à la journée suivante",
                 target=None,
-                details="Frigo et nutrition sauvegardés puis réinitialisés",
+                details=(
+                    f"Journée du {result['log_date'].isoformat()} enregistrée. "
+                    f"Nouvelle date : {new_date_str}. "
+                    f"{expired} produit(s) retiré(s) du frigo (frigo vidé)."
+                ),
                 created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             ))
             db.commit()
+
+        return RedirectResponse(
+            url=f"/?next_day=1&new_date={new_date_str}&expired={expired}",
+            status_code=303,
+        )
 
     return RedirectResponse(url="/?next_day=1", status_code=303)
 
@@ -544,4 +559,4 @@ def alerts_page(request: Request):
     redirect = require_auth(request)
     if redirect:
         return redirect
-    return render_page("Alertes", "/alerts", _alerts_body(), request)
+    return render_page("Alertes", "/alerts", _alerts_body(), request)   

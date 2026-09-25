@@ -31,9 +31,18 @@ class FridgeItemDB(Base):
     category = Column(String, default="")
     notes = Column(String, default="")
 
+
+class AppDateDB(Base):
+    __tablename__ = "app_dates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, unique=True, index=True)
+    current_date = Column(String, nullable=False)
+
+
 class DailyLogDB(Base):
     __tablename__ = "daily_logs"
- 
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=False, index=True)
     log_date = Column(String, nullable=False, index=True)

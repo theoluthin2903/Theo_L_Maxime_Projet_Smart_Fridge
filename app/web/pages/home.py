@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -17,9 +19,19 @@ def home_page(request: Request):
 
     next_day_notice = ""
     if request.query_params.get("next_day") == "1":
-        next_day_notice = """
+        new_date = request.query_params.get("new_date", "")
+        expired = request.query_params.get("expired", "0")
+        try:
+            new_date_label = date.fromisoformat(new_date).strftime("%d/%m/%Y") if new_date else ""
+        except ValueError:
+            new_date_label = new_date
+        date_part = f" Nous sommes maintenant le <strong>{new_date_label}</strong>." if new_date_label else ""
+        expired_part = (
+            f" {expired} produit(s) retiré(s) — le frigo a été vidé pour la nouvelle journée." if expired and expired != "0" else ""
+        )
+        next_day_notice = f"""
             <div class="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-semibold text-green-800 dark:border-green-700 dark:bg-green-900/30 dark:text-green-200">
-                ✅ Journée enregistrée ! Votre frigo et votre nutrition ont été remis à zéro.
+                ✅ Journée enregistrée dans Supabase !{date_part}{expired_part}
             </div>
         """
 
@@ -34,7 +46,7 @@ def home_page(request: Request):
                         <div class="mt-6 flex flex-wrap gap-3">
                             <a href="/fridge" class="rounded-xl bg-green-700 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-green-800">🧊 Ouvrir mon frigo</a>
                             <a href="/recipes" class="rounded-xl border border-green-200 bg-white px-5 py-3 font-bold text-green-700 shadow-sm transition hover:bg-green-50 dark:border-slate-600 dark:bg-slate-800 dark:text-green-300 dark:hover:bg-slate-700">🍳 Voir les recettes</a>
-                            <form method="post" action="/fridge/next-day" onsubmit="return confirm('Passer à la journée suivante ? Le frigo et la nutrition actuels seront sauvegardés puis remis à zéro.');">
+                            <form method="post" action="/fridge/next-day" onsubmit="return confirm('Passer à la journée suivante ? Le frigo et la nutrition du jour seront sauvegardés dans Supabase, la date avancera d’un jour et le frigo sera entièrement vidé.');">
                                 <button type="submit" class="rounded-xl border border-amber-200 bg-white px-5 py-3 font-bold text-amber-700 shadow-sm transition hover:bg-amber-50 dark:border-slate-600 dark:bg-slate-800 dark:text-amber-300 dark:hover:bg-slate-700">⏭️ Passer à la journée suivante</button>
                             </form>
                         </div>
