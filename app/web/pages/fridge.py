@@ -392,7 +392,7 @@ def next_day(request: Request):
     """Sauvegarde le frigo + la nutrition du jour en cours dans Supabase, puis
     fait réellement avancer l'application au jour suivant : la date simulée
     est incrémentée de 1 (le menu déroulant des dates d'expiration en tiendra
-    compte) et le frigo est entièrement vidé pour la nouvelle journée."""
+    compte) et seuls les produits désormais périmés sont retirés du frigo."""
     redirect = require_auth(request)
     if redirect:
         return redirect
@@ -412,7 +412,7 @@ def next_day(request: Request):
                 details=(
                     f"Journée du {result['log_date'].isoformat()} enregistrée. "
                     f"Nouvelle date : {new_date_str}. "
-                    f"{expired} produit(s) retiré(s) du frigo (frigo vidé)."
+                    f"{expired} produit(s) périmé(s) retiré(s) du frigo."
                 ),
                 created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             ))
@@ -513,7 +513,7 @@ async def recipes_page(request: Request):
                 <div class="recipe-card__meta">{tags}</div>
                 {nutrition_html}
                 <p class="recipe-card__desc">{escape(recipe['description'])}</p>
-                {f"""
+                {f'''
                 <form method="post" action="/recipes/consume" class="recipe-consume-form">
                     <p class="recipe-consume-form__title">🍽️ Combien avez-vous mangé ?</p>
                     <div class="recipe-consume-form__controls">
@@ -532,7 +532,7 @@ async def recipes_page(request: Request):
                         <button type="submit" class="recipe-consume-form__button">🍽️ Ajouter à mon suivi</button>
                     </div>
                 </form>
-                """ if nutrition else ""}
+                ''' if nutrition else ""}
                 {details}
             </div>
         </article>
@@ -696,4 +696,4 @@ def alerts_page(request: Request):
     if redirect:
         return redirect
     user_id = get_user_id_from_cookie(request)
-    return render_page("Alertes", "/alerts", _alerts_body(user_id), request)   
+    return render_page("Alertes", "/alerts", _alerts_body(user_id), request)

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import asc
 
 from app.db.database import SessionLocal
-from app.db.models import AppDateDB, DailyLogDB, FridgeItemDB, RecipeTranslationDB
+from app.db.models import AppDateDB, DailyLogDB, FridgeItemDB, RecipeLeftoverDB, RecipeTranslationDB
 
 load_dotenv()
 
@@ -985,18 +985,29 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
     return result
 
 
-def get_alerts():
+def get_alerts(user_id: int | None = None):
     alerts = []
-    for item in fridge_items:
+    items = load_fridge_items(user_id) if user_id is not None else fridge_items
+    for item in items:
         if item.get("expiration_date"):
-            alerts.append(
-                {
-                    "title": f"{item['name']} à consommer",
-                    "message": f"Produit dans le frigo jusqu’au {item['expiration_date']}.",
-                }
-            )
+            alerts.append({
+                "title": f"{item['name']} à consommer",
+                "message": f"Produit dans le frigo jusqu’au {item['expiration_date']}.",
+            })
+
+    if user_id is not None:
+        with SessionLocal() as db:
+            leftovers = db.query(RecipeLeftoverDB).filter(
+                RecipeLeftoverDB.user_id == int(user_id), RecipeLeftoverDB.remaining_percent > 0
+            ).all()
+        for leftover in leftovers:
+            alerts.append({
+                "title": f"Reste de {leftover.recipe_name}",
+                "message": f"Il reste {round(leftover.remaining_percent)}% de la recette (environ {round(leftover.calories_remaining)} kcal) dans votre frigo.",
+            })
+
     if not alerts:
-        alerts.append({"title": "Frigo vide", "message": "Ajoutez des produits pour recevoir des alertes."})
+        alerts.append({"title": "Aucune alerte", "message": "Aucun produit ou reste de recette à surveiller pour le moment."})
     return alerts
 
 
