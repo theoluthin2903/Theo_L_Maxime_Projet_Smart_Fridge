@@ -9,6 +9,7 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str = Field(..., min_length=6)
+    remember_me: bool = False
 
 
 class Token(BaseModel):

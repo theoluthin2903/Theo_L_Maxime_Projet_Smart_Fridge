@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, HTTPException, Depends, Response
 from sqlalchemy.orm import Session
 
@@ -12,15 +14,21 @@ from app.core.dependencies import get_current_user
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-def set_auth_cookie(response: Response, token: str):
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=False,
-        max_age=60 * 60,
-    )
+def set_auth_cookie(response: Response, token: str, remember_me: bool = False):
+    cookie_options = {
+        "key": "access_token",
+        "value": token,
+        "httponly": True,
+        "samesite": "lax",
+        "secure": False,
+    }
+
+    # Sans « Rester connecté », le cookie est un cookie de session :
+    # il disparaît lorsque le navigateur est complètement fermé.
+    if remember_me:
+        cookie_options["max_age"] = 60 * 60 * 24 * 30
+
+    response.set_cookie(**cookie_options)
 
 
 @router.post("/register", response_model=Token)
@@ -48,8 +56,9 @@ def login(user: UserLogin, response: Response, db: Session = Depends(get_db)):
     if not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=400, detail="Identifiants invalides")
 
-    token = create_access_token({"sub": str(db_user.id)})
-    set_auth_cookie(response, token)
+    token_lifetime = timedelta(days=30) if user.remember_me else timedelta(hours=12)
+    token = create_access_token({"sub": str(db_user.id)}, expires_delta=token_lifetime)
+    set_auth_cookie(response, token, remember_me=user.remember_me)
     return Token(access_token=token)
 
 

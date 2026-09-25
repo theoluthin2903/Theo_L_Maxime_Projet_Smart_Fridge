@@ -29,6 +29,10 @@ def render_auth_page() -> HTMLResponse:
                             <button type="button" class="password-toggle" data-target="login-password">Voir</button>
                         </div>
                     </div>
+                    <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        <input id="remember-me" name="remember_me" type="checkbox" value="true" class="h-4 w-4 rounded border-slate-300 accent-pink-500" />
+                        <span>Rester connecté</span>
+                    </label>
                     <button type="submit" class="btn btn-primary">Se connecter</button>
                     <div id="login-message" class="message message--hidden"></div>
                 </form>
@@ -114,6 +118,9 @@ def render_auth_page() -> HTMLResponse:
                     event.preventDefault();
                     const formData = new FormData(form);
                     const payload = Object.fromEntries(formData.entries());
+                    if (formId === 'login-form') {
+                        payload.remember_me = document.getElementById('remember-me')?.checked === true;
+                    }
 
                     if (payload.password && payload.password.length < 6) {
                         messageBox.textContent = 'Le mot de passe doit contenir au moins 6 caractères.';
@@ -139,7 +146,10 @@ def render_auth_page() -> HTMLResponse:
                         }
 
                         if (formId === 'login-form' && result.access_token) {
-                            localStorage.setItem('smartfridge_token', result.access_token);
+                            const rememberMe = document.getElementById('remember-me')?.checked === true;
+                            localStorage.removeItem('smartfridge_token');
+                            sessionStorage.removeItem('smartfridge_token');
+                            (rememberMe ? localStorage : sessionStorage).setItem('smartfridge_token', result.access_token);
                         }
 
                         messageBox.textContent = successText;
