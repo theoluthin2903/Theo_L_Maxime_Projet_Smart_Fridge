@@ -859,3 +859,482 @@ html.dark .profile-card__top{background:linear-gradient(135deg,rgba(34,197,94,.1
 html.dark .profile-card__qty{background:#0f172a;color:#86efac;box-shadow:none}
 html.dark .profile-card__title{color:#f1f5f9}
 html.dark .profile-card__desc{color:#cbd5e1}
+
+/* =====================================================================
+   RESPONSIVE GLOBAL — Smart Fridge
+   Objectif : conserver le même design tout en évitant les débordements
+   sur tablette et mobile. Aucun changement de structure/HTML nécessaire.
+   ===================================================================== */
+
+/* Évite les débordements horizontaux causés par les longues chaînes,
+   les formulaires et les composants flex/grid. */
+html {
+  overflow-x: hidden;
+}
+
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+a,
+button,
+input,
+textarea,
+select {
+  max-width: 100%;
+}
+
+button,
+a {
+  overflow-wrap: anywhere;
+}
+
+/* Les grands blocs restent contenus dans la largeur disponible. */
+.content,
+.page,
+.card,
+.admin-panel,
+.admin-hero,
+.auth-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.recipe-grid {
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+}
+
+.admin-grid-2 {
+  width: 100%;
+}
+
+.admin-chart {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.admin-table,
+.admin-panel .overflow-x-auto {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---------------------------------------------------------------------
+   Tablette
+   --------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .content {
+    padding: 24px;
+  }
+
+  .auth-shell {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  .auth-form {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-card--dark .auth-form {
+    align-items: stretch;
+  }
+
+  form {
+    grid-template-columns: 1fr;
+  }
+
+  .field.full {
+    grid-column: auto;
+  }
+
+  .admin-hero {
+    padding: 24px;
+  }
+
+  .admin-hero h1 {
+    font-size: clamp(1.7rem, 5vw, 2.2rem);
+  }
+
+  .admin-panel-head {
+    flex-wrap: wrap;
+  }
+
+  .admin-panel-head > strong {
+    white-space: normal;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Mobile : navigation compacte + contenu pleine largeur
+   --------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  /* Le layout Tailwind de layout.py devient une navigation horizontale
+     compacte sur mobile, sans modifier le HTML. */
+  body > .flex.min-h-screen {
+    display: block !important;
+    min-height: 100vh;
+  }
+
+  body > .flex.min-h-screen > aside {
+    width: 100% !important;
+    padding: 14px 12px !important;
+    position: relative;
+    z-index: 30;
+  }
+
+  body > .flex.min-h-screen > aside > div:first-child {
+    margin-bottom: 12px !important;
+    font-size: 1.45rem !important;
+    text-align: center;
+  }
+
+  body > .flex.min-h-screen > aside nav {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 7px !important;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 1px 6px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  body > .flex.min-h-screen > aside nav a {
+    flex: 0 0 auto;
+    padding: 9px 12px !important;
+    font-size: 0.84rem;
+    white-space: nowrap;
+  }
+
+  body > .flex.min-h-screen > aside form {
+    display: none;
+  }
+
+  body > .flex.min-h-screen > aside > button,
+  body > .flex.min-h-screen > aside #theme-toggle {
+    margin-top: 8px !important;
+    padding: 9px 12px !important;
+  }
+
+  body > .flex.min-h-screen > aside > div:not(:first-child) {
+    max-width: 100%;
+  }
+
+  body > .flex.min-h-screen > main {
+    width: 100%;
+    min-width: 0;
+    padding: 16px !important;
+  }
+
+  body > .flex.min-h-screen > main > div {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .page {
+    gap: 14px;
+  }
+
+  .card {
+    padding: 18px;
+    border-radius: 16px;
+  }
+
+  /* Titres générés par les pages avec les classes Tailwind. */
+  h1 {
+    font-size: clamp(1.65rem, 7vw, 2rem) !important;
+    line-height: 1.15;
+  }
+
+  h2 {
+    font-size: clamp(1.25rem, 5.5vw, 1.55rem) !important;
+    line-height: 1.2;
+  }
+
+  h3 {
+    line-height: 1.25;
+  }
+
+  /* Les boutons pleine largeur évitent les boutons qui débordent
+     lorsque le texte devient long. */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .admin-btn {
+    min-height: 42px;
+  }
+
+  /* Hero / blocs d'action */
+  .admin-hero {
+    padding: 20px;
+    border-radius: 18px;
+  }
+
+  .admin-hero .admin-btn {
+    width: 100%;
+  }
+
+  .admin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .admin-stat {
+    min-width: 0;
+    padding: 13px;
+    gap: 8px;
+  }
+
+  .admin-stat > span {
+    font-size: 1.3rem;
+  }
+
+  .admin-stat strong {
+    font-size: 1.25rem;
+  }
+
+  .admin-panel {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .admin-panel-head {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .admin-panel-head h2 {
+    font-size: 1.05rem !important;
+  }
+
+  .admin-tabs {
+    position: static;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding: 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-tab {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    padding: 9px 11px;
+  }
+
+  .admin-quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  /* Graphique : on garde les colonnes lisibles et on autorise
+     un défilement horizontal plutôt qu'un écrasement. */
+  .admin-chart {
+    justify-content: flex-start;
+    gap: 14px;
+    min-height: 150px;
+    padding-left: 4px;
+  }
+
+  .admin-chart-col {
+    flex: 0 0 42px;
+  }
+
+  .admin-chart-bar {
+    width: 30px;
+  }
+
+  /* Cartes */
+  .recipe-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .recipe-card__img {
+    height: 185px;
+  }
+
+  .recipe-card__body,
+  .profile-card__body {
+    padding: 14px;
+  }
+
+  .recipe-card__title,
+  .profile-card__title {
+    font-size: 1rem;
+  }
+
+  .nutrition-product-card__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fridge-card__top,
+  .profile-card__top {
+    padding: 12px 14px;
+  }
+
+  /* Les grilles Tailwind utilisées dans les pages passent en une
+     colonne sur petit écran, sans toucher aux templates. */
+  main .grid {
+    min-width: 0;
+  }
+
+  main .grid.md\:grid-cols-2,
+  main .grid.md\:grid-cols-3,
+  main .grid.md\:grid-cols-4 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Les rangées de boutons / liens restent empilables. */
+  main .flex.flex-wrap {
+    align-items: stretch;
+  }
+
+  main .flex.flex-wrap > a,
+  main .flex.flex-wrap > button {
+    max-width: 100%;
+  }
+
+  /* Formulaires */
+  .field {
+    min-width: 0;
+  }
+
+  input,
+  textarea,
+  select {
+    min-width: 0;
+    font-size: 16px; /* évite le zoom automatique iOS */
+  }
+
+  textarea {
+    min-height: 110px;
+  }
+
+  /* Tableaux admin : défilement horizontal, jamais de casse de page. */
+  .admin-panel table {
+    min-width: 620px;
+    width: max-content;
+  }
+
+  .admin-panel th,
+  .admin-panel td {
+    white-space: nowrap;
+  }
+
+  /* Logs */
+  .admin-log {
+    align-items: flex-start;
+    min-width: 0;
+  }
+
+  .admin-log > div:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Page d'authentification */
+  .auth-shell {
+    min-height: 100vh;
+    padding: 18px 12px;
+    gap: 14px;
+  }
+
+  .auth-card {
+    padding: 22px 18px;
+    border-radius: 20px;
+  }
+
+  .auth-card h1,
+  .auth-card h2 {
+    font-size: clamp(1.7rem, 8vw, 2.2rem);
+  }
+
+  .auth-badge,
+  .auth-badge--light {
+    margin-bottom: 12px;
+  }
+
+  .password-input-wrap input {
+    padding-right: 76px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Très petits écrans
+   --------------------------------------------------------------------- */
+@media (max-width: 420px) {
+  body > .flex.min-h-screen > aside {
+    padding: 11px 8px !important;
+  }
+
+  body > .flex.min-h-screen > aside > div:first-child {
+    font-size: 1.3rem !important;
+  }
+
+  body > .flex.min-h-screen > aside nav a {
+    padding: 8px 10px !important;
+    font-size: 0.78rem;
+  }
+
+  body > .flex.min-h-screen > main {
+    padding: 12px !important;
+  }
+
+  .card,
+  .admin-panel {
+    padding: 14px;
+  }
+
+  .admin-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .nutrition-product-card__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .recipe-card__img {
+    height: 155px;
+  }
+
+  .recipe-tag {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+  }
+
+  .admin-stat {
+    padding: 12px;
+  }
+
+  .admin-chart {
+    min-height: 135px;
+  }
+}
+
+/* Respecte les préférences d'accessibilité sans casser le responsive. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
