@@ -5,7 +5,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.db.database import SessionLocal
-from app.db.models import AdminLogDB, UserDB
+from app.db.models import AdminLogDB, NutritionIntakeDB, RecipeLeftoverDB, UserDB
 
 from app.web.data import (
     add_fridge_item,
@@ -109,6 +109,46 @@ def fridge_page(request: Request):
     items_html = "".join(fridge_card(item) for item in items)
     if not items_html:
         items_html = "<div class='rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-slate-500'>Votre frigo est vide pour le moment.</div>"
+
+    leftovers_html = ""
+    if is_logged_in:
+        with SessionLocal() as db:
+            leftovers = (
+                db.query(RecipeLeftoverDB)
+                .filter(RecipeLeftoverDB.user_id == int(user_id), RecipeLeftoverDB.remaining_percent > 0)
+                .order_by(RecipeLeftoverDB.updated_at.desc())
+                .all()
+            )
+        if leftovers:
+            leftover_cards = "".join(
+                f"""
+                <article class="recipe-card fridge-card">
+                    <div class="fridge-card__top">
+                        <span class="fridge-card__emoji" aria-hidden="true">🍲</span>
+                        <span class="fridge-card__qty">{round(leftover.remaining_percent)}% restant</span>
+                    </div>
+                    <div class="recipe-card__body">
+                        <h3 class="recipe-card__title">{escape(leftover.recipe_name)}</h3>
+                        <div class="recipe-card__meta">
+                            <span class="recipe-tag recipe-tag--warn">🥡 Reste de recette</span>
+                            <span class="recipe-tag">🔥 {round(leftover.calories_remaining)} kcal</span>
+                        </div>
+                        <p class="recipe-card__desc">Il reste {round(leftover.remaining_percent)}% de cette recette dans le frigo.</p>
+                        <form method="post" action="/recipes/leftover/consume" class="mt-3">
+                            <input type="hidden" name="leftover_id" value="{leftover.id}">
+                            <button class="rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800" type="submit">🍽️ Manger le reste</button>
+                        </form>
+                    </div>
+                </article>
+                """ for leftover in leftovers
+            )
+            leftovers_html = f"""
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+                <h2 class="mb-2 text-2xl font-bold text-slate-800">🥡 Restes de recettes</h2>
+                <p class="mb-4 text-sm text-slate-600">Les portions non mangées restent ici jusqu'à ce que vous les consommiez.</p>
+                <div class="recipe-grid">{leftover_cards}</div>
+            </div>
+            """
 
     visitor_notice = "" if is_logged_in else """
         <div class="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -266,6 +306,8 @@ def fridge_page(request: Request):
                 productSelect.addEventListener('change', syncCategory);
             }}
         </script>
+
+        {leftovers_html}
 
         <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
             <h2 class="mb-4 text-2xl font-bold text-slate-800">Contenu actuel</h2>
@@ -471,6 +513,26 @@ async def recipes_page(request: Request):
                 <div class="recipe-card__meta">{tags}</div>
                 {nutrition_html}
                 <p class="recipe-card__desc">{escape(recipe['description'])}</p>
+                {f"""
+                <form method="post" action="/recipes/consume" class="recipe-consume-form">
+                    <p class="recipe-consume-form__title">🍽️ Combien avez-vous mangé ?</p>
+                    <div class="recipe-consume-form__controls">
+                        <input type="hidden" name="meal_id" value="{meal_id}">
+                        <input type="hidden" name="recipe_name" value="{escape(recipe['name'], quote=True)}">
+                        <input type="hidden" name="calories" value="{float(nutrition.get('calories', 0) or 0) if nutrition else 0}">
+                        <input type="hidden" name="proteines" value="{float(nutrition.get('proteines', 0) or 0) if nutrition else 0}">
+                        <input type="hidden" name="glucides" value="{float(nutrition.get('glucides', 0) or 0) if nutrition else 0}">
+                        <input type="hidden" name="lipides" value="{float(nutrition.get('lipides', 0) or 0) if nutrition else 0}">
+                        <select name="consumed_percent" class="recipe-consume-form__select">
+                            <option value="25">1/4 de la recette (25%)</option>
+                            <option value="50">La moitié (50%)</option>
+                            <option value="75">3/4 de la recette (75%)</option>
+                            <option value="100">Toute la recette (100%)</option>
+                        </select>
+                        <button type="submit" class="recipe-consume-form__button">🍽️ Ajouter à mon suivi</button>
+                    </div>
+                </form>
+                """ if nutrition else ""}
                 {details}
             </div>
         </article>
@@ -511,6 +573,80 @@ async def recipes_page(request: Request):
     return render_page("Recettes", "/recipes", body, request)
 
 
+@router.post("/recipes/consume")
+def consume_recipe(
+    request: Request,
+    meal_id: str = Form(...),
+    recipe_name: str = Form(...),
+    consumed_percent: float = Form(...),
+    calories: float = Form(0),
+    proteines: float = Form(0),
+    glucides: float = Form(0),
+    lipides: float = Form(0),
+):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+    user_id = get_user_id_from_cookie(request)
+    if user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+
+    percent = max(0.0, min(float(consumed_percent), 100.0))
+    factor = percent / 100.0
+    remaining = 100.0 - percent
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with SessionLocal() as db:
+        db.add(NutritionIntakeDB(
+            user_id=int(user_id), meal_id=str(meal_id), recipe_name=recipe_name.strip(),
+            consumed_percent=percent, calories=calories * factor, proteines=proteines * factor,
+            glucides=glucides * factor, lipides=lipides * factor, consumed_at=now,
+        ))
+        leftover = db.query(RecipeLeftoverDB).filter(
+            RecipeLeftoverDB.user_id == int(user_id), RecipeLeftoverDB.meal_id == str(meal_id)
+        ).first()
+        if remaining > 0:
+            values = dict(
+                recipe_name=recipe_name.strip(), remaining_percent=remaining,
+                calories_remaining=calories * remaining / 100.0,
+                proteines_remaining=proteines * remaining / 100.0,
+                glucides_remaining=glucides * remaining / 100.0,
+                lipides_remaining=lipides * remaining / 100.0, updated_at=now,
+            )
+            if leftover:
+                for key, value in values.items(): setattr(leftover, key, value)
+            else:
+                db.add(RecipeLeftoverDB(user_id=int(user_id), meal_id=str(meal_id), created_at=now, **values))
+        elif leftover:
+            db.delete(leftover)
+        db.commit()
+    return RedirectResponse(url="/nutrition?added=1", status_code=303)
+
+
+@router.post("/recipes/leftover/consume")
+def consume_recipe_leftover(request: Request, leftover_id: int = Form(...)):
+    redirect = require_auth(request)
+    if redirect:
+        return redirect
+    user_id = get_user_id_from_cookie(request)
+    if user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with SessionLocal() as db:
+        leftover = db.query(RecipeLeftoverDB).filter(
+            RecipeLeftoverDB.id == int(leftover_id), RecipeLeftoverDB.user_id == int(user_id)
+        ).first()
+        if leftover:
+            db.add(NutritionIntakeDB(
+                user_id=int(user_id), meal_id=leftover.meal_id, recipe_name=leftover.recipe_name,
+                consumed_percent=leftover.remaining_percent, calories=leftover.calories_remaining,
+                proteines=leftover.proteines_remaining, glucides=leftover.glucides_remaining,
+                lipides=leftover.lipides_remaining, consumed_at=now,
+            ))
+            db.delete(leftover)
+            db.commit()
+    return RedirectResponse(url="/nutrition?added=1", status_code=303)
+
+
 @router.get("/recipes/{meal_id}/instructions", response_class=JSONResponse)
 def recipe_instructions(request: Request, meal_id: str):
     redirect = require_auth(request)
@@ -519,8 +655,8 @@ def recipe_instructions(request: Request, meal_id: str):
     return JSONResponse({"instructions": get_recipe_instructions_fr(meal_id)})
 
 
-def _alerts_body():
-    alerts = get_alerts()
+def _alerts_body(user_id=None):
+    alerts = get_alerts(user_id)
     cards = "".join(
         f"""
         <article class="recipe-card">
@@ -559,4 +695,5 @@ def alerts_page(request: Request):
     redirect = require_auth(request)
     if redirect:
         return redirect
-    return render_page("Alertes", "/alerts", _alerts_body(), request)
+    user_id = get_user_id_from_cookie(request)
+    return render_page("Alertes", "/alerts", _alerts_body(user_id), request)   

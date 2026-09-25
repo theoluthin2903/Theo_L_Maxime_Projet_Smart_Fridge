@@ -1464,3 +1464,70 @@ main textarea {
   body > .flex.min-h-screen > main { padding: 10px !important; }
   main .rounded-2xl { border-radius: 14px !important; }
 }
+
+
+/* ===== Formulaire de consommation des recettes ===== */
+.recipe-consume-form{
+  display:block;
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  margin-top:16px;
+  padding:12px;
+  overflow:visible;
+  border:1px solid #dcfce7;
+  border-radius:12px;
+  background:#f0fdf4;
+}
+.recipe-consume-form__title{
+  display:block;
+  margin:0 0 10px;
+  color:#334155;
+  font-size:.875rem;
+  font-weight:800;
+  line-height:1.35;
+}
+.recipe-consume-form__controls{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) !important;
+  gap:8px;
+  width:100%;
+  min-width:0;
+}
+.recipe-consume-form__select,
+.recipe-consume-form__button{
+  display:block !important;
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+  margin:0 !important;
+}
+.recipe-consume-form__select{
+  height:42px;
+  padding:8px 10px;
+  border:1px solid #bbf7d0;
+  border-radius:9px;
+  background:#fff;
+  color:#1e293b;
+  font-size:.875rem;
+}
+.recipe-consume-form__button{
+  min-height:42px;
+  padding:9px 10px;
+  border:0;
+  border-radius:9px;
+  background:#15803d;
+  color:#fff;
+  font-size:.875rem;
+  font-weight:700;
+  line-height:1.3;
+  white-space:normal;
+  cursor:pointer;
+}
+.recipe-consume-form__button:hover{background:#166534}
+html.dark .recipe-consume-form{border-color:#065f46;background:rgba(6,78,59,.28)}
+html.dark .recipe-consume-form__title{color:#f1f5f9}
+html.dark .recipe-consume-form__select{border-color:#047857;background:#0f172a;color:#fff}
+html.dark .recipe-consume-form__button{background:#059669;color:#fff}
+html.dark .recipe-consume-form__button:hover{background:#047857}

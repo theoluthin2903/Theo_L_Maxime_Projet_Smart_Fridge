@@ -71,6 +71,40 @@ class RecipeTranslationDB(Base):
     updated_at = Column(String, nullable=False)
 
 
+class NutritionIntakeDB(Base):
+    __tablename__ = "nutrition_intakes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    meal_id = Column(String, nullable=True, index=True)
+    recipe_name = Column(String, nullable=False)
+    consumed_percent = Column(Float, nullable=False, default=100)
+    calories = Column(Float, default=0)
+    proteines = Column(Float, default=0)
+    glucides = Column(Float, default=0)
+    lipides = Column(Float, default=0)
+    consumed_at = Column(String, nullable=False, index=True)
+
+
+class RecipeLeftoverDB(Base):
+    __tablename__ = "recipe_leftovers"
+    __table_args__ = (
+        UniqueConstraint("user_id", "meal_id", name="uq_recipe_leftover_user_meal"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    meal_id = Column(String, nullable=False, index=True)
+    recipe_name = Column(String, nullable=False)
+    remaining_percent = Column(Float, nullable=False, default=0)
+    calories_remaining = Column(Float, default=0)
+    proteines_remaining = Column(Float, default=0)
+    glucides_remaining = Column(Float, default=0)
+    lipides_remaining = Column(Float, default=0)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+
 class AdminLogDB(Base):
     __tablename__ = "admin_logs"
 
