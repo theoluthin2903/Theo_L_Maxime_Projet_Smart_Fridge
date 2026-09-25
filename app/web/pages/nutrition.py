@@ -81,10 +81,6 @@ def nutrition_page(request: Request):
 
         food = get_food_nutrition(name)
 
-        # USDA fournit les valeurs nutritionnelles pour 100 g.
-        # La quantité du frigo représente un nombre de produits, pas un nombre
-        # de portions de 100 g. On convertit donc chaque unité vers son poids
-        # moyen estimé avant de multiplier les macros.
         portion_grams = float(food.get("portion_grams", 100) or 100)
         factor = (portion_grams * quantity) / 100.0
 

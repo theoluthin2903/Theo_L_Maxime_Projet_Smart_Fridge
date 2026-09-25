@@ -23,11 +23,6 @@ load_dotenv()
 USDA_API_KEY = os.getenv("USDA_API_KEY")
 USDA_SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
 
-# ---------------------------------------------------------------------------
-# Piège n°4 du brief : décalage lexical anglais britannique (TheMealDB) vs
-# nomenclature américaine (USDA FoodData Central). On tente d'abord le nom
-# tel quel, puis ce mapping comme repli si l'USDA ne renvoie rien.
-# ---------------------------------------------------------------------------
 UK_TO_US_INGREDIENT_MAP: dict[str, str] = {
     "aubergine": "eggplant",
     "courgette": "zucchini",
@@ -184,16 +179,12 @@ async def get_ingredient_nutrition_per_100g_async(client: httpx.AsyncClient, ing
         }
 
     if last_error is not None:
-        # On ne fait pas planter le pipeline : l'ingrédient sera simplement
-        # marqué "estimé" côté appelant.
         print(f"[nutrition_engine] {last_error}")
     return None
 
 
 _FRACTIONS = {"¼": 0.25, "½": 0.5, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3}
 
-# Conversions volume -> grammes très approximatives (densité proche de l'eau).
-# But pédagogique : donner un ordre de grandeur, pas une valeur exacte.
 _UNIT_TO_GRAMS = {
     "g": 1, "gram": 1, "grams": 1,
     "kg": 1000, "kilogram": 1000, "kilograms": 1000,
@@ -208,10 +199,6 @@ _UNIT_TO_GRAMS = {
 }
 _VOLUME_UNITS = {"tsp", "teaspoon", "teaspoons", "tbsp", "tablespoon", "tablespoons", "cup", "cups"}
 
-# Densité approximative (g pour 1 "cup") de quelques ingrédients secs
-# fréquents, très différente de l'eau (~240 g/cup) utilisée par défaut :
-# une tasse de farine ne pèse pas la même chose qu'une tasse de lait.
-# Approximation volontairement simple, à but pédagogique.
 _DRY_DENSITY_G_PER_CUP = {
     "flour": 125, "self rising flour": 130, "self-raising flour": 130,
     "plain flour": 125, "all purpose flour": 125, "wholemeal flour": 120,
@@ -235,9 +222,6 @@ def _cup_grams_for(ingredient_name: str) -> float:
 
 _DEFAULT_PORTION_GRAMS = 100  # utilisé quand la mesure ne peut vraiment pas être interprétée
 
-# Formulations culinaires sans chiffre ("Pinch of salt", "To taste"...) : avant
-# ce correctif, elles retombaient toutes sur 100 g par défaut, ce qui
-# surestimait énormément les épices (une pincée pèse <1 g, pas 100 g).
 _TEXTUAL_SMALL_AMOUNTS = {
     "pinch": 0.3,
     "dash": 0.3,
@@ -269,9 +253,6 @@ def parse_quantity_grams(measure: str, ingredient_name: str = "") -> tuple[float
 
     match = re.match(r"\s*(\d+\s*/\s*\d+|\d+(?:[.,]\d+)?)", text)
     if not match:
-        # Pas de chiffre du tout : on cherche une formulation reconnue
-        # ("pinch", "to taste"...) avant de retomber sur la portion par
-        # défaut, plus large et réservée aux cas vraiment ambigus.
         for phrase, grams in _TEXTUAL_SMALL_AMOUNTS.items():
             if phrase in text:
                 return grams, True
@@ -288,11 +269,6 @@ def parse_quantity_grams(measure: str, ingredient_name: str = "") -> tuple[float
         return _DEFAULT_PORTION_GRAMS, True
 
     rest = text[match.end():].strip()
-    # Extrait le premier "mot" de l'unité (ex: "lb ground beef" -> "lb") et
-    # compare une correspondance EXACTE, jamais un simple préfixe : sinon
-    # "lb" (livre) matchait par erreur "l" (litre) car "lb".startswith("l"),
-    # ce qui multipliait par ~2,2 la quantité réelle sans jamais être marqué
-    # comme une estimation.
     first_word_match = re.match(r"[a-zà-ÿ]+", rest)
     unit_token = first_word_match.group(0) if first_word_match else ""
     if unit_token in ("cup", "cups"):

@@ -36,9 +36,6 @@ html.dark, html.dark body {
   color: #e2e8f0 !important;
 }
 
-/* Couverture globale : les pages utilisent des classes Tailwind directes
-   (bg-white, bg-green-50, text-slate-800, ...) sans variante dark:,
-   on les force donc ici pour que tout le site bascule d'un coup. */
 html.dark main {
   background: transparent !important;
 }
@@ -860,14 +857,7 @@ html.dark .profile-card__qty{background:#0f172a;color:#86efac;box-shadow:none}
 html.dark .profile-card__title{color:#f1f5f9}
 html.dark .profile-card__desc{color:#cbd5e1}
 
-/* =====================================================================
-   RESPONSIVE GLOBAL — Smart Fridge
-   Objectif : conserver le même design tout en évitant les débordements
-   sur tablette et mobile. Aucun changement de structure/HTML nécessaire.
-   ===================================================================== */
 
-/* Évite les débordements horizontaux causés par les longues chaînes,
-   les formulaires et les composants flex/grid. */
 html {
   overflow-x: hidden;
 }
@@ -899,7 +889,6 @@ a {
   overflow-wrap: anywhere;
 }
 
-/* Les grands blocs restent contenus dans la largeur disponible. */
 .content,
 .page,
 .card,
@@ -1071,8 +1060,6 @@ a {
     line-height: 1.25;
   }
 
-  /* Les boutons pleine largeur évitent les boutons qui débordent
-     lorsque le texte devient long. */
   .btn,
   .btn-primary,
   .btn-secondary,
@@ -1142,8 +1129,6 @@ a {
     grid-template-columns: 1fr;
   }
 
-  /* Graphique : on garde les colonnes lisibles et on autorise
-     un défilement horizontal plutôt qu'un écrasement. */
   .admin-chart {
     justify-content: flex-start;
     gap: 14px;
@@ -1188,8 +1173,6 @@ a {
     padding: 12px 14px;
   }
 
-  /* Les grilles Tailwind utilisées dans les pages passent en une
-     colonne sur petit écran, sans toucher aux templates. */
   main .grid {
     min-width: 0;
   }
@@ -1200,7 +1183,6 @@ a {
     grid-template-columns: 1fr !important;
   }
 
-  /* Les rangées de boutons / liens restent empilables. */
   main .flex.flex-wrap {
     align-items: stretch;
   }
@@ -1210,7 +1192,6 @@ a {
     max-width: 100%;
   }
 
-  /* Formulaires */
   .field {
     min-width: 0;
   }
@@ -1219,14 +1200,13 @@ a {
   textarea,
   select {
     min-width: 0;
-    font-size: 16px; /* évite le zoom automatique iOS */
+    font-size: 16px;
   }
 
   textarea {
     min-height: 110px;
   }
 
-  /* Tableaux admin : défilement horizontal, jamais de casse de page. */
   .admin-panel table {
     min-width: 620px;
     width: max-content;
@@ -1327,7 +1307,6 @@ a {
   }
 }
 
-/* Respecte les préférences d'accessibilité sans casser le responsive. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1345,8 +1324,6 @@ a {
 .mobile-header-row { display: block; }
 .mobile-menu-toggle { display: none; }
 .mobile-menu { display: block; }
-
-/* Tous les champs doivent rester dans leur carte, même avec un libellé long. */
 main form,
 main form > div,
 main select,
@@ -1417,7 +1394,6 @@ main textarea {
   }
   .mobile-menu.is-open { display: block; }
 
-  /* Remplace l'ancienne barre horizontale par un menu vertical compact. */
   body > .flex.min-h-screen > aside .mobile-menu nav {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1434,7 +1410,6 @@ main textarea {
     overflow-wrap: anywhere;
   }
 
-  /* Réactive les actions utilisateur dans le menu hamburger. */
   body > .flex.min-h-screen > aside .mobile-menu form {
     display: block;
   }
@@ -1443,7 +1418,6 @@ main textarea {
     padding: 12px !important;
   }
 
-  /* Frigo et formulaires : aucun champ ne peut dépasser de la carte. */
   main form.grid,
   main form[class*="grid"] {
     display: grid !important;
