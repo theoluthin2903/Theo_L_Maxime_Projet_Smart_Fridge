@@ -1531,3 +1531,32 @@ html.dark .recipe-consume-form__title{color:#f1f5f9}
 html.dark .recipe-consume-form__select{border-color:#047857;background:#0f172a;color:#fff}
 html.dark .recipe-consume-form__button{background:#059669;color:#fff}
 html.dark .recipe-consume-form__button:hover{background:#047857}
+
+
+/* ===== Alertes intelligentes V2 : états visuels prioritaires ===== */
+.recipe-card.fridge-card--warning{background:#fffbeb !important;border-color:#fbbf24 !important;border-width:2px}
+.recipe-card.fridge-card--urgent{background:#fff7ed !important;border-color:#fb923c !important;border-width:2px}
+.recipe-card.fridge-card--danger{background:#fef2f2 !important;border-color:#ef4444 !important;border-width:2px}
+.recipe-card.fridge-card--expired{background:#fee2e2 !important;border-color:#b91c1c !important;border-width:2px}
+html.dark .recipe-card.fridge-card--warning{background:rgba(120,53,15,.28) !important;border-color:#f59e0b !important}
+html.dark .recipe-card.fridge-card--urgent{background:rgba(124,45,18,.32) !important;border-color:#f97316 !important}
+html.dark .recipe-card.fridge-card--danger,html.dark .recipe-card.fridge-card--expired{background:rgba(127,29,29,.34) !important;border-color:#ef4444 !important}
+
+.nutrition-stat{transition:background-color .2s ease,border-color .2s ease}
+.nutrition-stat--ok{background:#fff !important;border-color:#dcfce7 !important}
+.nutrition-stat--warning{background:#fffbeb !important;border-color:#f59e0b !important;border-width:2px !important}
+.nutrition-stat--danger{background:#fef2f2 !important;border-color:#dc2626 !important;border-width:2px !important}
+html.dark .nutrition-stat--ok{background:#1e293b !important;border-color:#334155 !important}
+html.dark .nutrition-stat--warning{background:rgba(120,53,15,.30) !important;border-color:#f59e0b !important}
+html.dark .nutrition-stat--danger{background:rgba(127,29,29,.36) !important;border-color:#ef4444 !important}
+
+.recipe-card.alert-card--danger{background:#fef2f2 !important;border-color:#ef4444 !important;border-width:2px}
+.recipe-card.alert-card--urgent{background:#fff7ed !important;border-color:#fb923c !important;border-width:2px}
+.recipe-card.alert-card--warning{background:#fffbeb !important;border-color:#f59e0b !important;border-width:2px}
+.recipe-card.alert-card--info{background:#f0f9ff !important;border-color:#38bdf8 !important}
+.recipe-card.alert-card--success{background:#f0fdf4 !important;border-color:#4ade80 !important}
+html.dark .recipe-card.alert-card--danger{background:rgba(127,29,29,.36) !important;border-color:#ef4444 !important}
+html.dark .recipe-card.alert-card--urgent{background:rgba(124,45,18,.32) !important;border-color:#f97316 !important}
+html.dark .recipe-card.alert-card--warning{background:rgba(120,53,15,.30) !important;border-color:#f59e0b !important}
+html.dark .recipe-card.alert-card--info{background:rgba(12,74,110,.28) !important;border-color:#38bdf8 !important}
+html.dark .recipe-card.alert-card--success{background:rgba(20,83,45,.28) !important;border-color:#4ade80 !important}

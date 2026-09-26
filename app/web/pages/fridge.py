@@ -14,7 +14,6 @@ from app.web.data import (
     get_available_products,
     get_current_app_date,
     get_fridge_search_query,
-    get_alerts,
     get_themealdb_recipes,
     get_recipe_instructions_fr,
     get_usda_foods,
@@ -63,18 +62,22 @@ def fridge_page(request: Request):
                 return emoji
         return "🍽️"
 
-    def expiration_badge(expiration: str) -> str:
+    def expiration_state(expiration: str):
         if not expiration:
-            return '<span class="recipe-tag">📅 Pas de date</span>'
+            return "normal", '<span class="recipe-tag">📅 Pas de date</span>'
         try:
             days_left = (date.fromisoformat(expiration) - app_today).days
         except ValueError:
-            return f'<span class="recipe-tag">📅 {escape(expiration)}</span>'
+            return "normal", f'<span class="recipe-tag">📅 {escape(expiration)}</span>'
         if days_left < 0:
-            return f'<span class="recipe-tag recipe-tag--danger">⚠️ Expiré ({escape(expiration)})</span>'
+            return "expired", f'<span class="recipe-tag recipe-tag--danger">🚨 Périmé · {escape(expiration)}</span>'
+        if days_left == 0:
+            return "danger", '<span class="recipe-tag recipe-tag--danger">🔴 Expire aujourd’hui</span>'
+        if days_left == 1:
+            return "urgent", '<span class="recipe-tag recipe-tag--warn">🟠 Expire demain</span>'
         if days_left <= 3:
-            return f'<span class="recipe-tag recipe-tag--warn">⏳ Expire le {escape(expiration)}</span>'
-        return f'<span class="recipe-tag recipe-tag--fridge">📅 Expire le {escape(expiration)}</span>'
+            return "warning", f'<span class="recipe-tag recipe-tag--warn">🟡 Expire dans {days_left} jours</span>'
+        return "normal", f'<span class="recipe-tag recipe-tag--fridge">📅 Expire le {escape(expiration)}</span>'
 
     def fridge_card(item):
         delete_form = (
@@ -91,15 +94,23 @@ def fridge_page(request: Request):
         )
         notes = item.get("notes") or ""
         notes_html = f'<p class="fridge-card__notes">📝 {escape(notes)}</p>' if notes else ""
+        expiry_state, expiry_badge = expiration_state(item.get("expiration_date"))
+        state_classes = {
+            "expired": "fridge-card--expired",
+            "danger": "fridge-card--danger",
+            "urgent": "fridge-card--urgent",
+            "warning": "fridge-card--warning",
+            "normal": "",
+        }.get(expiry_state, "")
         return f"""
-        <article class="recipe-card fridge-card">
+        <article class="recipe-card fridge-card {state_classes}">
             <div class="fridge-card__top">
                 <span class="fridge-card__emoji" aria-hidden="true">{category_emoji(category)}</span>
                 <span class="fridge-card__qty">× {escape(str(item['quantity']))}</span>
             </div>
             <div class="recipe-card__body">
                 <h3 class="recipe-card__title">{escape(item['name'])}</h3>
-                <div class="recipe-card__meta">{category_tag}{expiration_badge(item.get('expiration_date'))}</div>
+                <div class="recipe-card__meta">{category_tag}{expiry_badge}</div>
                 {notes_html}
                 {delete_form}
             </div>
@@ -653,47 +664,3 @@ def recipe_instructions(request: Request, meal_id: str):
     if redirect:
         return JSONResponse({"detail": "Authentification requise"}, status_code=401)
     return JSONResponse({"instructions": get_recipe_instructions_fr(meal_id)})
-
-
-def _alerts_body(user_id=None):
-    alerts = get_alerts(user_id)
-    cards = "".join(
-        f"""
-        <article class="recipe-card">
-            <div class="fridge-card__top">
-                <span class="fridge-card__emoji" aria-hidden="true">🔔</span>
-                <span class="fridge-card__qty">À surveiller</span>
-            </div>
-            <div class="recipe-card__body">
-                <h3 class="recipe-card__title">{alert['title']}</h3>
-                <p class="recipe-card__desc">{alert['message']}</p>
-            </div>
-        </article>
-        """
-        for alert in alerts
-    )
-    return f"""
-        <section class="space-y-6">
-            <div class="overflow-hidden rounded-2xl border border-green-100 bg-white shadow-sm">
-                <div class="bg-gradient-to-br from-green-50 via-white to-emerald-50 px-6 py-7 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900 md:px-8">
-                    <span class="recipe-tag recipe-tag--fridge">🔔 Centre d'alertes</span>
-                    <h1 class="mt-4 text-3xl font-extrabold text-slate-800 dark:text-slate-100">Alertes de votre frigo</h1>
-                    <p class="mt-2 max-w-2xl text-slate-600 dark:text-slate-300">Retrouvez ici les produits à surveiller pour mieux anticiper leur consommation et limiter le gaspillage.</p>
-                    <div class="mt-5 flex flex-wrap gap-2">
-                        <span class="recipe-tag">📋 {len(alerts)} alerte(s)</span>
-                        <a href="/fridge" class="recipe-tag recipe-tag--fridge no-underline">🧊 Voir mon frigo →</a>
-                    </div>
-                </div>
-            </div>
-            <div class="recipe-grid">{cards}</div>
-        </section>
-    """
-
-
-@router.get("/alerts", response_class=HTMLResponse)
-def alerts_page(request: Request):
-    redirect = require_auth(request)
-    if redirect:
-        return redirect
-    user_id = get_user_id_from_cookie(request)
-    return render_page("Alertes", "/alerts", _alerts_body(user_id), request)

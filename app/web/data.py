@@ -15,7 +15,11 @@ from pydantic import BaseModel
 from sqlalchemy import asc
 
 from app.db.database import SessionLocal
-from app.db.models import AppDateDB, DailyLogDB, FridgeItemDB, RecipeLeftoverDB, RecipeTranslationDB
+from app.db.models import (
+    AppDateDB, DailyLogDB, FridgeItemDB, NutritionIntakeDB, RecipeLeftoverDB,
+    RecipeTranslationDB, UserDB,
+)
+from app.core.metabolism import compute_bmr_tdee
 
 load_dotenv()
 
@@ -986,13 +990,44 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
 
 
 def get_alerts(user_id: int | None = None):
+    """Retourne uniquement les alertes réellement utiles, avec un niveau de gravité."""
     alerts = []
     items = load_fridge_items(user_id) if user_id is not None else fridge_items
+    current_day = get_current_app_date(user_id) if user_id is not None else date.today()
+
+    # Péremption : on n'alerte que lorsqu'elle devient proche (3 jours ou moins).
     for item in items:
-        if item.get("expiration_date"):
+        expiration = (item.get("expiration_date") or "").strip()
+        if not expiration:
+            continue
+        try:
+            expiration_day = date.fromisoformat(expiration)
+        except ValueError:
+            continue
+        days_left = (expiration_day - current_day).days
+        if days_left < 0:
             alerts.append({
-                "title": f"{item['name']} à consommer",
-                "message": f"Produit dans le frigo jusqu’au {item['expiration_date']}.",
+                "level": "danger", "icon": "🚨", "badge": "Expiré",
+                "title": f"{item['name']} est périmé",
+                "message": f"La date de péremption était le {expiration_day.strftime('%d/%m/%Y')}.",
+            })
+        elif days_left == 0:
+            alerts.append({
+                "level": "danger", "icon": "🔴", "badge": "Aujourd’hui",
+                "title": f"{item['name']} expire aujourd’hui",
+                "message": "À consommer aujourd’hui si le produit est encore propre à la consommation.",
+            })
+        elif days_left == 1:
+            alerts.append({
+                "level": "urgent", "icon": "🟠", "badge": "Demain",
+                "title": f"{item['name']} expire demain",
+                "message": f"Date de péremption : {expiration_day.strftime('%d/%m/%Y')}.",
+            })
+        elif days_left <= 3:
+            alerts.append({
+                "level": "warning", "icon": "🟡", "badge": f"J-{days_left}",
+                "title": f"{item['name']} expire bientôt",
+                "message": f"Il reste {days_left} jours avant la date du {expiration_day.strftime('%d/%m/%Y')}.",
             })
 
     if user_id is not None:
@@ -1000,14 +1035,52 @@ def get_alerts(user_id: int | None = None):
             leftovers = db.query(RecipeLeftoverDB).filter(
                 RecipeLeftoverDB.user_id == int(user_id), RecipeLeftoverDB.remaining_percent > 0
             ).all()
+            user = db.query(UserDB).filter(UserDB.id == int(user_id)).first()
+            today = date.today().isoformat()
+            intakes = db.query(NutritionIntakeDB).filter(
+                NutritionIntakeDB.user_id == int(user_id),
+                NutritionIntakeDB.consumed_at.like(f"{today}%"),
+            ).all()
+
         for leftover in leftovers:
             alerts.append({
+                "level": "info", "icon": "🥡", "badge": "Reste",
                 "title": f"Reste de {leftover.recipe_name}",
-                "message": f"Il reste {round(leftover.remaining_percent)}% de la recette (environ {round(leftover.calories_remaining)} kcal) dans votre frigo.",
+                "message": f"Il reste {round(leftover.remaining_percent)}% de la recette (environ {round(leftover.calories_remaining or 0)} kcal).",
             })
 
+        # Alertes nutritionnelles du jour.
+        if user and all([user.age is not None, user.weight is not None, user.height is not None, user.sex, user.activity, user.goal]):
+            nutrition = compute_bmr_tdee(user)
+            totals = {
+                "Calories": (sum(float(x.calories or 0) for x in intakes), nutrition["target_calories"], "kcal"),
+                "Protéines": (sum(float(x.proteines or 0) for x in intakes), nutrition["macros"]["proteins_g"], "g"),
+                "Glucides": (sum(float(x.glucides or 0) for x in intakes), nutrition["macros"]["carbs_g"], "g"),
+                "Lipides": (sum(float(x.lipides or 0) for x in intakes), nutrition["macros"]["fats_g"], "g"),
+            }
+            for label, (value, target, unit) in totals.items():
+                if not target:
+                    continue
+                percent = (value / target) * 100
+                if percent > 100:
+                    alerts.append({
+                        "level": "danger", "icon": "🔴", "badge": f"{round(percent)}%",
+                        "title": f"Objectif {label.lower()} dépassé",
+                        "message": f"{round(value)} {unit} consommés pour un objectif de {round(target)} {unit} (+{round(value-target)} {unit}).",
+                    })
+                elif percent >= 100:
+                    alerts.append({
+                        "level": "warning", "icon": "⚠️", "badge": "100%",
+                        "title": f"Objectif {label.lower()} atteint",
+                        "message": f"Vous avez atteint votre objectif de {round(target)} {unit} pour aujourd’hui.",
+                    })
+
     if not alerts:
-        alerts.append({"title": "Aucune alerte", "message": "Aucun produit ou reste de recette à surveiller pour le moment."})
+        alerts.append({
+            "level": "success", "icon": "✅", "badge": "Tout va bien",
+            "title": "Aucune alerte importante",
+            "message": "Aucun produit proche de sa péremption et aucun objectif nutritionnel dépassé.",
+        })
     return alerts
 
 

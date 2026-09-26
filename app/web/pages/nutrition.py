@@ -30,21 +30,51 @@ def get_user_id(request: Request):
 def progress(value, target):
     if not target or target <= 0:
         return 0
-    return min(round((value / target) * 100), 100)
+    return round((value / target) * 100)
 
 
 def stat_card(title, value, unit, percent, target=0):
-    remaining = max(round(target - value), 0) if target else 0
-    remaining_html = f'<p class="mt-1 text-xs text-slate-400">Reste {remaining} {unit}</p>' if target else ""
+    # 0-99 % = vert, 100 % = orange (objectif atteint), >100 % = rouge.
+    if target and percent > 100:
+        state = "danger"
+        border = "nutrition-stat--danger"
+        bg = ""
+        value_color = "text-red-700 dark:text-red-300"
+        bar = "bg-red-600"
+        status = f"🚨 Objectif dépassé de {round(value - target)} {unit}"
+        status_color = "text-red-700 dark:text-red-300"
+    elif target and percent >= 100:
+        state = "warning"
+        border = "nutrition-stat--warning"
+        bg = ""
+        value_color = "text-amber-700 dark:text-amber-300"
+        bar = "bg-amber-500"
+        status = "⚠️ Objectif atteint"
+        status_color = "text-amber-700 dark:text-amber-300"
+    else:
+        state = "ok"
+        border = "nutrition-stat--ok"
+        bg = ""
+        value_color = "text-slate-800 dark:text-white"
+        bar = "bg-green-600"
+        remaining = max(round(target - value), 0) if target else 0
+        status = f"Reste {remaining} {unit}" if target else ""
+        status_color = "text-slate-400"
+
+    # La barre reste visuellement dans la carte même si l'objectif est dépassé.
+    bar_width = min(max(percent, 0), 100)
     return f"""
-    <div class="rounded-2xl border border-green-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <p class="text-sm text-slate-500 dark:text-slate-300">{title}</p>
-        <p class="mt-2 text-3xl font-bold text-slate-800 dark:text-white">{round(value)} <span class="text-base font-normal">{unit}</span></p>
-        <div class="mt-4 h-3 rounded-full bg-slate-200 dark:bg-slate-700">
-            <div class="h-3 rounded-full bg-green-600" style="width: {percent}%"></div>
+    <div class="nutrition-stat rounded-2xl border {border} {bg} p-5 shadow-sm" data-nutrition-state="{state}">
+        <div class="flex items-start justify-between gap-2">
+            <p class="text-sm text-slate-500 dark:text-slate-300">{title}</p>
+            {f'<span class="rounded-full bg-red-600 px-2 py-1 text-xs font-bold text-white">ALERTE</span>' if state == 'danger' else (f'<span class="rounded-full bg-amber-500 px-2 py-1 text-xs font-bold text-white">100%</span>' if state == 'warning' else '')}
         </div>
-        <p class="mt-2 text-sm text-slate-500 dark:text-slate-300">{percent}% de l'objectif</p>
-        {remaining_html}
+        <p class="mt-2 text-3xl font-bold {value_color}">{round(value)} <span class="text-base font-normal">{unit}</span></p>
+        <div class="mt-4 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+            <div class="h-3 rounded-full {bar}" style="width: {bar_width}%"></div>
+        </div>
+        <p class="mt-2 text-sm font-semibold {status_color}">{percent}% de l'objectif</p>
+        {f'<p class="mt-1 text-xs font-semibold {status_color}">{status}</p>' if status else ''}
     </div>
     """
 
@@ -140,12 +170,41 @@ def nutrition_page(request: Request):
     <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-semibold text-green-800">✅ Repas ajouté à votre suivi nutritionnel.</div>
     """ if request.query_params.get("added") == "1" else ""
 
+    exceeded = []
+    reached = []
+    for label, value, target, unit in [
+        ("Calories", total_calories, target_calories, "kcal"),
+        ("Protéines", total_proteins, target_proteins, "g"),
+        ("Glucides", total_carbs, target_carbs, "g"),
+        ("Lipides", total_fat, target_fat, "g"),
+    ]:
+        if target and value > target:
+            exceeded.append(f"{label} (+{round(value-target)} {unit})")
+        elif target and value >= target:
+            reached.append(label)
+
+    if exceeded:
+        nutrition_alert = f"""
+        <div class="rounded-2xl border border-red-300 bg-red-50 p-4 text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
+            <p class="font-bold">🚨 Objectif nutritionnel dépassé</p>
+            <p class="mt-1 text-sm">Vous avez dépassé : {', '.join(exceeded)}. Les cartes concernées sont affichées en rouge.</p>
+        </div>"""
+    elif reached:
+        nutrition_alert = f"""
+        <div class="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <p class="font-bold">⚠️ Objectif atteint</p>
+            <p class="mt-1 text-sm">Objectif atteint pour : {', '.join(reached)}. Surveillez les prochains apports de la journée.</p>
+        </div>"""
+    else:
+        nutrition_alert = ""
+
     body = f"""
     <div class="space-y-6">
         <div><h1 class="text-3xl font-bold text-slate-800 dark:text-white">Nutrition</h1>
         <p class="mt-2 text-slate-600 dark:text-slate-300">Suivez ce que vous avez réellement mangé, pas simplement ce qui se trouve dans votre frigo.</p></div>
         {added_notice}
         {profile_block}
+        {nutrition_alert}
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {stat_card("Calories mangées", total_calories, "kcal", progress(total_calories, target_calories), target_calories)}
             {stat_card("Protéines", total_proteins, "g", progress(total_proteins, target_proteins), target_proteins)}
