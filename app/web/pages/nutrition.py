@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from html import escape
 
 from fastapi import APIRouter, Request
@@ -79,6 +79,82 @@ def stat_card(title, value, unit, percent, target=0):
     """
 
 
+def _daily_nutrition_series(intakes, days: int):
+    end = date.today()
+    start = end - timedelta(days=days - 1)
+    by_day = {}
+    for intake in intakes:
+        raw = (intake.consumed_at or "")[:10]
+        try:
+            intake_date = date.fromisoformat(raw)
+        except (TypeError, ValueError):
+            continue
+        if not start <= intake_date <= end:
+            continue
+        bucket = by_day.setdefault(raw, {"calories": 0.0, "proteines": 0.0, "glucides": 0.0, "lipides": 0.0})
+        bucket["calories"] += float(intake.calories or 0)
+        bucket["proteines"] += float(intake.proteines or 0)
+        bucket["glucides"] += float(intake.glucides or 0)
+        bucket["lipides"] += float(intake.lipides or 0)
+    rows = []
+    for offset in range(days):
+        current = start + timedelta(days=offset)
+        values = by_day.get(current.isoformat(), {"calories": 0.0, "proteines": 0.0, "glucides": 0.0, "lipides": 0.0})
+        rows.append({"date": current, **values})
+    return rows
+
+
+def _trend_chart(title, rows, key, unit, target=0):
+    max_value = max([float(row[key]) for row in rows] + ([float(target)] if target else [1.0]))
+    max_value = max(max_value, 1.0)
+    bars = []
+    for index, row in enumerate(rows):
+        value = float(row[key])
+        height = min((value / max_value) * 100, 100)
+        show_label = len(rows) <= 7 or index in {0, len(rows) - 1} or index % 5 == 0
+        label = row["date"].strftime("%d/%m") if show_label else ""
+        day_label = row["date"].strftime("%d/%m/%Y")
+        shown_value = round(value) if value else ""
+        ratio = (value / float(target) * 100) if target else 0
+        if value <= 0:
+            status_class = "nutrition-trend-bar--empty"
+            status_text = "Aucune consommation"
+        elif target and ratio >= 100:
+            status_class = "nutrition-trend-bar--danger"
+            status_text = f"Objectif dépassé ({round(ratio)} %)"
+        elif target and ratio >= 80:
+            status_class = "nutrition-trend-bar--warning"
+            status_text = f"Proche de l'objectif ({round(ratio)} %)"
+        else:
+            status_class = "nutrition-trend-bar--good"
+            status_text = f"{round(ratio)} % de l'objectif" if target else "Dans la zone normale"
+        target_line = ""
+        if target:
+            target_height = min((float(target) / max_value) * 100, 100)
+            target_line = f'<span class="nutrition-trend-target" style="bottom:{target_height:.1f}%" aria-hidden="true"></span>'
+        bars.append(
+            f'<div class="nutrition-trend-col" title="{day_label} : {round(value, 1)} {unit} — {status_text}">'
+            f'<div class="nutrition-trend-value">{shown_value}</div>'
+            f'<div class="nutrition-trend-track">{target_line}<div class="nutrition-trend-bar {status_class}" style="height:{height:.1f}%"></div></div>'
+            f'<div class="nutrition-trend-label">{label}</div></div>'
+        )
+    target_note = f"Objectif quotidien : {round(target)} {unit}" if target else "Objectif indisponible"
+    return f"""
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
+            <h3 class="font-bold text-slate-800 dark:text-white">{title}</h3>
+            <span class="text-xs text-slate-500 dark:text-slate-400">{target_note}</span>
+        </div>
+        <div class="nutrition-trend-legend" aria-label="Légende du graphique">
+            <span><i class="nutrition-legend-dot nutrition-legend-good"></i>Normal (&lt; 80 %)</span>
+            <span><i class="nutrition-legend-dot nutrition-legend-warning"></i>Proche (80–99 %)</span>
+            <span><i class="nutrition-legend-dot nutrition-legend-danger"></i>Atteint / dépassé (≥ 100 %)</span>
+            <span><i class="nutrition-legend-line"></i>Objectif 100 %</span>
+        </div>
+        <div class="nutrition-trend-grid">{''.join(bars)}</div>
+    </section>"""
+
+
 @router.get("/nutrition", response_class=HTMLResponse)
 def nutrition_page(request: Request):
     redirect = require_auth(request)
@@ -87,6 +163,12 @@ def nutrition_page(request: Request):
 
     user_id = get_user_id(request)
     today = date.today().isoformat()
+    try:
+        period_days = int(request.query_params.get("period", "7"))
+    except ValueError:
+        period_days = 7
+    period_days = 30 if period_days == 30 else 7
+    period_start = (date.today() - timedelta(days=period_days - 1)).isoformat()
 
     with SessionLocal() as db:
         user = db.query(UserDB).filter(UserDB.id == user_id).first() if user_id else None
@@ -97,6 +179,16 @@ def nutrition_page(request: Request):
                 NutritionIntakeDB.consumed_at.like(f"{today}%"),
             )
             .order_by(NutritionIntakeDB.id.desc())
+            .all()
+            if user_id else []
+        )
+        period_intakes = (
+            db.query(NutritionIntakeDB)
+            .filter(
+                NutritionIntakeDB.user_id == int(user_id),
+                NutritionIntakeDB.consumed_at >= period_start,
+            )
+            .order_by(NutritionIntakeDB.consumed_at.asc())
             .all()
             if user_id else []
         )
@@ -198,12 +290,47 @@ def nutrition_page(request: Request):
     else:
         nutrition_alert = ""
 
+    trend_rows = _daily_nutrition_series(period_intakes, period_days)
+    averages = {
+        "calories": sum(row["calories"] for row in trend_rows) / period_days,
+        "proteines": sum(row["proteines"] for row in trend_rows) / period_days,
+        "glucides": sum(row["glucides"] for row in trend_rows) / period_days,
+        "lipides": sum(row["lipides"] for row in trend_rows) / period_days,
+    }
+    days_with_data = sum(1 for row in trend_rows if any(row[key] > 0 for key in ("calories", "proteines", "glucides", "lipides")))
+    trend_block = f"""
+    <section class="space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 class="text-2xl font-bold text-slate-800 dark:text-white">📊 Évolution nutritionnelle</h2>
+            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Apports réellement enregistrés sur les {period_days} derniers jours.</p></div>
+            <div class="inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
+                <a href="/nutrition?period=7" class="rounded-lg px-4 py-2 text-sm font-bold {'bg-green-700 text-white' if period_days == 7 else 'text-slate-600 dark:text-slate-300'}">7 jours</a>
+                <a href="/nutrition?period=30" class="rounded-lg px-4 py-2 text-sm font-bold {'bg-green-700 text-white' if period_days == 30 else 'text-slate-600 dark:text-slate-300'}">30 jours</a>
+            </div>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"><p class="text-sm text-slate-500">🔥 Moyenne calories</p><p class="mt-1 text-2xl font-bold text-slate-800 dark:text-white">{round(averages['calories'])} kcal/j</p></div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"><p class="text-sm text-slate-500">🥩 Moyenne protéines</p><p class="mt-1 text-2xl font-bold text-slate-800 dark:text-white">{round(averages['proteines'])} g/j</p></div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"><p class="text-sm text-slate-500">🍚 Moyenne glucides</p><p class="mt-1 text-2xl font-bold text-slate-800 dark:text-white">{round(averages['glucides'])} g/j</p></div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"><p class="text-sm text-slate-500">🥑 Moyenne lipides</p><p class="mt-1 text-2xl font-bold text-slate-800 dark:text-white">{round(averages['lipides'])} g/j</p></div>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400">{days_with_data} jour(s) avec des repas enregistrés sur {period_days}. Les jours sans saisie comptent à 0 dans la moyenne quotidienne.</p>
+        <div class="grid gap-4 lg:grid-cols-2">
+            {_trend_chart('🔥 Calories par jour', trend_rows, 'calories', 'kcal', target_calories)}
+            {_trend_chart('🥩 Protéines par jour', trend_rows, 'proteines', 'g', target_proteins)}
+            {_trend_chart('🍚 Glucides par jour', trend_rows, 'glucides', 'g', target_carbs)}
+            {_trend_chart('🥑 Lipides par jour', trend_rows, 'lipides', 'g', target_fat)}
+        </div>
+    </section>
+    """
+
     body = f"""
     <div class="space-y-6">
         <div><h1 class="text-3xl font-bold text-slate-800 dark:text-white">Nutrition</h1>
         <p class="mt-2 text-slate-600 dark:text-slate-300">Suivez ce que vous avez réellement mangé, pas simplement ce qui se trouve dans votre frigo.</p></div>
         {added_notice}
         {profile_block}
+        {trend_block}
         {nutrition_alert}
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {stat_card("Calories mangées", total_calories, "kcal", progress(total_calories, target_calories), target_calories)}
