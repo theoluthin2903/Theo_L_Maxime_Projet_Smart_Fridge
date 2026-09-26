@@ -105,6 +105,57 @@ class RecipeLeftoverDB(Base):
     updated_at = Column(String, nullable=False)
 
 
+class MealPlanDB(Base):
+    __tablename__ = "meal_plans"
+    __table_args__ = (UniqueConstraint("user_id", "plan_date", "meal_type", name="uq_meal_plan_slot"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    plan_date = Column(String, nullable=False, index=True)
+    meal_type = Column(String, nullable=False)
+    meal_id = Column(String, nullable=True)
+    recipe_name = Column(String, nullable=False)
+
+
+class MealPlanConsumptionDB(Base):
+    __tablename__ = "meal_plan_consumptions"
+    __table_args__ = (UniqueConstraint("user_id", "meal_plan_id", name="uq_meal_plan_consumption"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    meal_plan_id = Column(Integer, nullable=False, index=True)
+    consumed_percent = Column(Float, nullable=False, default=100)
+    consumed_at = Column(String, nullable=False, index=True)
+
+
+class RecipeNutritionCacheDB(Base):
+    __tablename__ = "recipe_nutrition_cache"
+
+    meal_id = Column(String, primary_key=True)
+    recipe_name = Column(String, nullable=False)
+    calories = Column(Float, default=0)
+    proteines = Column(Float, default=0)
+    glucides = Column(Float, default=0)
+    lipides = Column(Float, default=0)
+    estimated = Column(Integer, nullable=False, default=0)
+    updated_at = Column(String, nullable=False)
+
+
+class NotificationDB(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("user_id", "source_key", name="uq_notification_source"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    level = Column(String, nullable=False, default="info")
+    icon = Column(String, nullable=False, default="🔔")
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False, default="")
+    source_key = Column(String, nullable=False)
+    is_read = Column(Integer, nullable=False, default=0, index=True)
+    created_at = Column(String, nullable=False)
+
+
 class AdminLogDB(Base):
     __tablename__ = "admin_logs"
 

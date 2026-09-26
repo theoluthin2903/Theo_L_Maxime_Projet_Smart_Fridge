@@ -16,6 +16,8 @@ from app.web.pages.fridge import router as fridge_pages_router
 from app.web.pages.home import router as home_pages_router
 from app.web.pages.nutrition import router as nutrition_pages_router
 from app.web.pages.profile import router as profile_pages_router
+from app.web.pages.planner import router as planner_pages_router
+from app.web.pages.notifications import router as notifications_pages_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -38,6 +40,8 @@ app.include_router(home_pages_router)
 app.include_router(auth_pages_router)
 app.include_router(fridge_pages_router)
 app.include_router(nutrition_pages_router)
+app.include_router(planner_pages_router)
+app.include_router(notifications_pages_router)
 app.include_router(alerts_pages_router)
 app.include_router(profile_pages_router)
 app.include_router(admin_pages_router)

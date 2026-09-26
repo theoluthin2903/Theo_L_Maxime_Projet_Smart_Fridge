@@ -56,13 +56,15 @@ def register_auth_middleware(app: FastAPI) -> None:
         return await call_next(request)
 
 
-def nav(active: str, is_admin: bool = False) -> str:
+def nav(active: str, is_admin: bool = False, unread_count: int = 0) -> str:
     links = [
         ("/", "Accueil"),
         ("/fridge", "Frigo"),
         ("/recipes", "Recettes"),
         ("/nutrition", "Nutrition"),
+        ("/planner", "Planning"),
         ("/alerts", "Alertes"),
+        ("/notifications", "Notifications"),
         ("/profile", "Profile"),
     ]
     if is_admin:
@@ -75,7 +77,8 @@ def nav(active: str, is_admin: bool = False) -> str:
             if is_active
             else 'block rounded-xl bg-white/10 px-4 py-3 text-white/90 transition hover:bg-white/15'
         )
-        html.append(f'<a href="{path}" class="{classes}">{label}</a>')
+        badge = f'<span class="nav-notification-badge">{unread_count if unread_count < 100 else "99+"}</span>' if path == '/notifications' and unread_count else ''
+        html.append(f'<a href="{path}" class="{classes} nav-link-with-badge"><span>{label}</span>{badge}</a>')
     return "".join(html)
 
 
@@ -136,6 +139,13 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
             except (JWTError, ValueError, TypeError):
                 pass
         is_logged_in = bool(user_email)
+        unread_count = 0
+        if is_logged_in and user_id:
+            try:
+                from app.web.notifications import unread_notification_count
+                unread_count = unread_notification_count(int(user_id))
+            except Exception as exc:
+                print(f"[Notifications] Compteur indisponible : {exc}")
         welcome_block = f"""
             <div class="mt-6 rounded-xl border border-white/15 bg-white/5 p-3 text-sm text-white/90">
                 <div class="text-xs uppercase tracking-[0.14em] text-white/60">Bienvenue</div>
@@ -145,6 +155,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
     else:
         is_logged_in = False
         is_admin = False
+        unread_count = 0
         welcome_block = ""
 
     logout_button = """
@@ -211,7 +222,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                     }}
                 }}
             </script>
-            <link rel="stylesheet" href="/static/styles.css?v=9" />
+            <link rel="stylesheet" href="/static/styles.css?v=11" />
             <style>
                 /* Visiteur : les formulaires de modification sont visibles mais inutilisables. */
                 .visitor-mode form[method="post"] input,
@@ -239,7 +250,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
                     </div>
                     <div id="mobile-menu" class="mobile-menu">
                         <nav class="flex flex-col gap-3">
-                            {nav(active, is_admin)}
+                            {nav(active, is_admin, unread_count)}
                         </nav>
                         {theme_toggle_button}
                         {welcome_block}
