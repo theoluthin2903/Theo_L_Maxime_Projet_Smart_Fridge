@@ -19,16 +19,19 @@ def home_page(request: Request):
 
     next_day_notice = ""
     if request.query_params.get("next_day") == "1":
+        # Les paramètres d'URL viennent du visiteur : on n'insère dans le HTML
+        # qu'une date valide et un nombre entier, jamais le texte brut.
         new_date = request.query_params.get("new_date", "")
-        expired = request.query_params.get("expired", "0")
         try:
             new_date_label = date.fromisoformat(new_date).strftime("%d/%m/%Y") if new_date else ""
         except ValueError:
-            new_date_label = new_date
+            new_date_label = ""
+        try:
+            expired = max(0, int(request.query_params.get("expired", "0")))
+        except ValueError:
+            expired = 0
         date_part = f" Nous sommes maintenant le <strong>{new_date_label}</strong>." if new_date_label else ""
-        expired_part = (
-            f" {expired} produit(s) périmé(s) retiré(s) du frigo." if expired and expired != "0" else ""
-        )
+        expired_part = f" {expired} produit(s) périmé(s) retiré(s) du frigo." if expired else ""
         next_day_notice = f"""
             <div class="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-semibold text-green-800 dark:border-green-700 dark:bg-green-900/30 dark:text-green-200">
                 ✅ Journée enregistrée dans Supabase !{date_part}{expired_part}

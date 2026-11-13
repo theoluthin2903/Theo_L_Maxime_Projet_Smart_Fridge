@@ -1,3 +1,4 @@
+from html import escape
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from jose import JWTError, jwt
@@ -149,7 +150,7 @@ def render_page(title: str, active: str, body: str, request: Request | None = No
         welcome_block = f"""
             <div class="mt-6 rounded-xl border border-white/15 bg-white/5 p-3 text-sm text-white/90">
                 <div class="text-xs uppercase tracking-[0.14em] text-white/60">Bienvenue</div>
-                <div class="mt-1 truncate font-semibold text-white">{user_email or 'Utilisateur'}</div>
+                <div class="mt-1 truncate font-semibold text-white">{escape(user_email) if user_email else 'Utilisateur'}</div>
             </div>
         """ if is_logged_in else ""
     else:

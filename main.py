@@ -8,7 +8,7 @@ from app.db.database import Base, engine
 from app.routers.auth import router as auth_router
 from app.routers.profile import router as profile_router
 from app.web.pages.admin import router as admin_pages_router
-from app.web.data import fridge_items, get_themealdb_recipes, get_usda_foods
+from app.web.data import get_themealdb_recipes, get_usda_foods
 from app.web.layout import register_auth_middleware, render_page
 from app.web.pages.alerts import router as alerts_pages_router
 from app.web.pages.authentification import router as auth_pages_router
@@ -46,6 +46,20 @@ app.include_router(alerts_pages_router)
 app.include_router(profile_pages_router)
 app.include_router(admin_pages_router)
 register_auth_middleware(app)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """En-têtes de sécurité ajoutés à toutes les réponses."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")  # pas d'affichage dans une iframe (clickjacking)
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    if request.url.scheme == "https" or forwarded == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 @app.exception_handler(404)
@@ -117,7 +131,6 @@ def custom_openapi():
 app.openapi = custom_openapi
 __all__ = [
     "app",
-    "fridge_items",
     "get_usda_foods",
     "get_themealdb_recipes",
 ]

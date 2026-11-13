@@ -24,7 +24,6 @@ from app.core.metabolism import compute_bmr_tdee
 load_dotenv()
 
 USDA_API_KEY = os.getenv("USDA_API_KEY")
-fridge_items = []
 
 # Cache court pour éviter de rappeler TheMealDB à chaque navigation Frigo ↔ Recettes.
 _RECIPE_CACHE: dict[str, tuple[float, list[dict]]] = {}
@@ -131,13 +130,17 @@ def get_recipe_instructions_fr(meal_id: str) -> str:
     return translated
 
 
-def load_fridge_items(user_id: int | None = None):
-    global fridge_items
+def load_fridge_items(user_id: int | None = None) -> list[dict]:
+    """Produits du frigo d'un utilisateur.
+
+    Pas de variable globale : chaque requête reçoit sa propre liste, sinon deux
+    utilisateurs servis en parallèle pourraient voir le frigo l'un de l'autre.
+    Sans utilisateur, la liste est vide (jamais le frigo de tout le monde)."""
+    if user_id is None:
+        return []
     with SessionLocal() as db:
-        query = db.query(FridgeItemDB)
-        if user_id is not None:
-            query = query.filter(FridgeItemDB.user_id == int(user_id))
-        fridge_items = [
+        query = db.query(FridgeItemDB).filter(FridgeItemDB.user_id == int(user_id))
+        return [
             {
                 "id": item.id,
                 "user_id": item.user_id,
@@ -149,7 +152,6 @@ def load_fridge_items(user_id: int | None = None):
             }
             for item in query.order_by(asc(FridgeItemDB.id)).all()
         ]
-    return fridge_items
 
 
 def add_fridge_item(
@@ -186,7 +188,6 @@ def add_fridge_item(
             "notes": item.notes or "",
         }
 
-    load_fridge_items(user_id)
     return created
 
 
@@ -199,7 +200,6 @@ def delete_fridge_item(item_id: int, user_id: int | None = None):
         if deleted:
             db.delete(deleted)
             db.commit()
-    load_fridge_items(user_id)
     return True
 
 
@@ -224,7 +224,6 @@ def clear_fridge_items(user_id: int):
     with SessionLocal() as db:
         db.query(FridgeItemDB).filter(FridgeItemDB.user_id == int(user_id)).delete()
         db.commit()
-    load_fridge_items(user_id)
     return True
 
 
@@ -302,8 +301,6 @@ def advance_to_next_day(user_id: int):
             date_row.current_date = new_date.isoformat()
         db.commit()
 
-    load_fridge_items(user_id)
-
     return {
         "new_date": new_date,
         "expired_removed": expired_count,
@@ -350,17 +347,17 @@ def flatten_meal_ingredients(meal: dict) -> list[IngredientQuantity]:
     return ingredients
 
 
-def get_fridge_ingredient_names():
+def get_fridge_ingredient_names(items: list[dict]) -> list[str]:
     names = []
-    for item in fridge_items:
+    for item in items:
         name = (item.get("name") or "").strip()
         if name and name not in names:
             names.append(name)
     return names
 
 
-def get_fridge_search_query():
-    names = get_fridge_ingredient_names()
+def get_fridge_search_query(items: list[dict]) -> str:
+    names = get_fridge_ingredient_names(items)
     return ", ".join(names) if names else ""
 
 
@@ -992,7 +989,7 @@ def get_themealdb_recipes(ingredient: str, limit: int | None = None):
 def get_alerts(user_id: int | None = None):
     """Retourne uniquement les alertes réellement utiles, avec un niveau de gravité."""
     alerts = []
-    items = load_fridge_items(user_id) if user_id is not None else fridge_items
+    items = load_fridge_items(user_id)
     current_day = get_current_app_date(user_id) if user_id is not None else date.today()
 
     # Péremption : on n'alerte que lorsqu'elle devient proche (3 jours ou moins).
@@ -1084,8 +1081,8 @@ def get_alerts(user_id: int | None = None):
     return alerts
 
 
-def get_nutrition_summary():
-    if not fridge_items:
+def get_nutrition_summary(items: list[dict]):
+    if not items:
         return {
             "energy": 0,
             "calories": 0,
@@ -1096,7 +1093,7 @@ def get_nutrition_summary():
         }
 
     total = {"calories": 0, "proteins": 0, "carbs": 0, "fat": 0}
-    for item in fridge_items:
+    for item in items:
         name = (item.get("name") or "").strip()
         if not name:
             continue

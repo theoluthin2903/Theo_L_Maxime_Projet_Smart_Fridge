@@ -63,8 +63,8 @@ async def planner_page(request: Request, start: str | None = None):
     planned = {(r.plan_date, r.meal_type): r for r in rows}
     consumed_by_plan = {r.meal_plan_id: r for r in consumption_rows}
 
-    load_fridge_items(uid)
-    ingredient = get_fridge_search_query()
+    items = load_fridge_items(uid)
+    ingredient = get_fridge_search_query(items)
     suggestions = get_themealdb_recipes(ingredient, limit=12) if ingredient else []
 
     # Calcule une seule fois la nutrition des recettes proposées puis la garde en base.

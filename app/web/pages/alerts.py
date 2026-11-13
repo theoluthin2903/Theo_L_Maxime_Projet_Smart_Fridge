@@ -1,3 +1,4 @@
+from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
@@ -29,12 +30,12 @@ def _alerts_body(user_id=None):
         cards += f"""
         <article class="recipe-card border {level_classes.get(level, level_classes['info'])}">
             <div class="fridge-card__top">
-                <span class="fridge-card__emoji" aria-hidden="true">{alert.get('icon', '🔔')}</span>
-                <span class="rounded-full px-3 py-1 text-xs font-bold {badge_classes.get(level, badge_classes['info'])}">{alert.get('badge', 'À surveiller')}</span>
+                <span class="fridge-card__emoji" aria-hidden="true">{escape(str(alert.get('icon', '🔔')))}</span>
+                <span class="rounded-full px-3 py-1 text-xs font-bold {badge_classes.get(level, badge_classes['info'])}">{escape(str(alert.get('badge', 'À surveiller')))}</span>
             </div>
             <div class="recipe-card__body">
-                <h3 class="recipe-card__title">{alert['title']}</h3>
-                <p class="recipe-card__desc">{alert['message']}</p>
+                <h3 class="recipe-card__title">{escape(str(alert['title']))}</h3>
+                <p class="recipe-card__desc">{escape(str(alert['message']))}</p>
             </div>
         </article>
         """

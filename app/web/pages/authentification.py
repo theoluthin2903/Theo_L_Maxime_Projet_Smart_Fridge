@@ -51,7 +51,7 @@ def render_auth_page() -> HTMLResponse:
                     <div class="field field--password">
                         <label for="register-password">Mot de passe</label>
                         <div class="password-input-wrap">
-                            <input id="register-password" name="password" type="password" placeholder="Minimum 6 caractères" autocomplete="new-password" required />
+                            <input id="register-password" name="password" type="password" placeholder="8 caractères, une lettre et un chiffre" autocomplete="new-password" required />
                             <button type="button" class="password-toggle" data-target="register-password">Voir</button>
                         </div>
                     </div>
@@ -95,7 +95,7 @@ def render_auth_page() -> HTMLResponse:
                 if (Array.isArray(detail)) {
                     const firstError = detail[0];
                     if (firstError && typeof firstError === 'object') {
-                        if (firstError.msg) return firstError.msg;
+                        if (firstError.msg) return String(firstError.msg).replace(/^Value error, /, '');
                         if (firstError.message) return firstError.message;
                     }
                     return detail.map(item => typeof item === 'string' ? item : (item?.msg || 'Erreur')).join(' ');
@@ -122,8 +122,8 @@ def render_auth_page() -> HTMLResponse:
                         payload.remember_me = document.getElementById('remember-me')?.checked === true;
                     }
 
-                    if (payload.password && payload.password.length < 6) {
-                        messageBox.textContent = 'Le mot de passe doit contenir au moins 6 caractères.';
+                    if (formId === 'register-form' && payload.password && payload.password.length < 8) {
+                        messageBox.textContent = 'Le mot de passe doit contenir au moins 8 caractères.';
                         messageBox.className = 'message message--error';
                         return;
                     }
@@ -145,12 +145,10 @@ def render_auth_page() -> HTMLResponse:
                             throw new Error(formatErrorMessage(result.detail));
                         }
 
-                        if (formId === 'login-form' && result.access_token) {
-                            const rememberMe = document.getElementById('remember-me')?.checked === true;
-                            localStorage.removeItem('smartfridge_token');
-                            sessionStorage.removeItem('smartfridge_token');
-                            (rememberMe ? localStorage : sessionStorage).setItem('smartfridge_token', result.access_token);
-                        }
+                        // Le jeton reste uniquement dans le cookie HttpOnly posé par le serveur :
+                        // il n'est jamais copié dans le stockage du navigateur, où un script pourrait le lire.
+                        localStorage.removeItem('smartfridge_token');
+                        sessionStorage.removeItem('smartfridge_token');
 
                         messageBox.textContent = successText;
                         messageBox.className = 'message message--success';

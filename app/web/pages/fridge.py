@@ -346,7 +346,7 @@ def add_to_fridge(
     if not name.strip():
         items = load_fridge_items(user_id)
         items_html = "".join(
-            f"<li class='rounded-xl border border-slate-200 bg-slate-50 p-4'><strong class='block text-slate-800'>{item['name']}</strong><div class='mt-1 text-sm text-slate-500'>{item['quantity']}</div></li>" for item in items
+            f"<li class='rounded-xl border border-slate-200 bg-slate-50 p-4'><strong class='block text-slate-800'>{escape(str(item['name']))}</strong><div class='mt-1 text-sm text-slate-500'>{escape(str(item['quantity']))}</div></li>" for item in items
         )
         body = f"""
             <div class="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
@@ -458,8 +458,8 @@ async def recipes_page(request: Request):
 
     # Une seule requête Supabase suffit pour reconstruire le contexte du frigo.
     # Cela rend aussi l'accès direct /recipes fiable après connexion/refresh.
-    load_fridge_items(int(user_id))
-    ingredient = get_fridge_search_query()
+    items = load_fridge_items(int(user_id))
+    ingredient = get_fridge_search_query(items)
     recipe_data = get_themealdb_recipes(ingredient, limit=12) if ingredient else []
 
     # Pipeline asynchrone (httpx + asyncio.gather) : calcule les calories et

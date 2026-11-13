@@ -28,6 +28,17 @@ Projet réalisé par **Théo L.** et **Maxime**.
 - **Authentification** : middleware + support JWT (Bearer) documenté dans le schéma OpenAPI
 - **APIs externes** : USDA FoodData Central (données nutritionnelles), TheMealDB (recettes)
 
+## 🔒 Sécurité
+
+- Mots de passe hachés (PBKDF2-SHA256) et jetons JWT signés avec une clé d'au moins 32 caractères (l'application refuse de démarrer sinon).
+- Jeton de connexion uniquement dans un cookie `HttpOnly`, `SameSite=Lax`, et `Secure` en HTTPS.
+- Blocage après 5 échecs de connexion en 15 minutes. Temps de réponse identique que le compte existe ou non.
+- Données saisies échappées avant affichage (protection XSS) et adresses e-mail validées à l'inscription.
+- En-têtes de sécurité : `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS en HTTPS.
+- 11 tests automatiques : `pip install -r requirements-dev.txt` puis `python -m pytest`.
+
+Le détail est dans [`SECURITE-LISEZ-MOI.md`](./SECURITE-LISEZ-MOI.md).
+
 ## 📁 Structure du projet
 
 ```
